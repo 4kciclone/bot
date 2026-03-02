@@ -15,17 +15,11 @@ YDL_OPTS = {
     'format': 'bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio/best',
     'quiet': True,
     'no_warnings': True,
-    'default_search': 'ytsearch1',   # só 1 resultado = mais rápido
-    'extract_flat': False,
-    'skip_download': True,
+    'default_search': 'ytsearch1',
     'noplaylist': True,
-    'cookiefile': '/root/gatocomics-bot/cookies.txt',
-    # Cache para não buscar a mesma música duas vezes
-    'cachedir': '/root/gatocomics-bot/.yt_cache',
-    # Conexões paralelas = mais rápido
-    'concurrent_fragment_downloads': 4,
-    # Timeout menor
+    'skip_download': True,
     'socket_timeout': 10,
+    'extractor_args': {'youtube': {'player_client': ['web']}},
 }
 FFMPEG_OPTS = {
     'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
