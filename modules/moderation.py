@@ -61,39 +61,38 @@ async def log_mod_action(guild: discord.Guild, action: str, target: discord.Memb
     await log_ch.send(embed=embed)
 
 
-def setup_commands(tree: app_commands.CommandTree, bot):
+async def on_message_ai(message):
+    """Analisa mensagens suspeitas com IA. Chamado pelo bot principal."""
+    if message.author.bot or not message.guild: return
+    if len(message.content) < 10: return
 
-    # ── Moderação inteligente com IA ──
-    @bot.event
-    async def on_message_ai(message):
-        """Analisa mensagens suspeitas com IA. Chamado pelo bot principal."""
-        if message.author.bot or not message.guild: return
-        if len(message.content) < 10: return
+    result = await ai_analyze(message.content)
 
-        result = await ai_analyze(message.content)
-
-        if result == "delete":
-            try:
-                await message.delete()
-                await message.channel.send(
-                    f"🤖 {message.author.mention} sua mensagem foi removida pela moderação automática.",
-                    delete_after=8
-                )
-                total = add_warn(message.guild.id, message.author.id, "Auto-warn: conteúdo removido por IA", "Bot")
-                await log_mod_action(message.guild, "Auto-Moderação (IA)", message.author,
-                                     message.guild.me, "Conteúdo removido automaticamente pela IA")
-                if total >= WARNS_BAN:
-                    await message.author.ban(reason=f"Auto-ban: {total} warns")
-                elif total >= WARNS_MUTE:
-                    until = discord.utils.utcnow() + datetime.timedelta(hours=1)
-                    await message.author.timeout(until, reason=f"Auto-mute: {total} warns")
-            except: pass
-
-        elif result == "warn":
+    if result == "delete":
+        try:
+            await message.delete()
             await message.channel.send(
-                f"⚠️ {message.author.mention} cuidado com o tom da sua mensagem!",
-                delete_after=10
+                f"🤖 {message.author.mention} sua mensagem foi removida pela moderação automática.",
+                delete_after=8
             )
+            total = add_warn(message.guild.id, message.author.id, "Auto-warn: conteúdo removido por IA", "Bot")
+            await log_mod_action(message.guild, "Auto-Moderação (IA)", message.author,
+                                 message.guild.me, "Conteúdo removido automaticamente pela IA")
+            if total >= WARNS_BAN:
+                await message.author.ban(reason=f"Auto-ban: {total} warns")
+            elif total >= WARNS_MUTE:
+                until = discord.utils.utcnow() + datetime.timedelta(hours=1)
+                await message.author.timeout(until, reason=f"Auto-mute: {total} warns")
+        except: pass
+
+    elif result == "warn":
+        await message.channel.send(
+            f"⚠️ {message.author.mention} cuidado com o tom da sua mensagem!",
+            delete_after=10
+        )
+
+
+def setup_commands(tree: app_commands.CommandTree, bot):
 
 
     @tree.command(name="kick", description="👢 Expulsa um membro")
