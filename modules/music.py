@@ -241,7 +241,7 @@ def setup_commands(tree: app_commands.CommandTree, bot):
             data = get_guild_data(interaction.guild.id)
 
             # Buscar música
-            track = await search_ytdlp(musica)
+            track = await search_track(musica)
             if not track:
                 await interaction.followup.send("❌ Não encontrei essa música.", ephemeral=True)
                 return
@@ -298,7 +298,7 @@ def setup_commands(tree: app_commands.CommandTree, bot):
 
             data = get_guild_data(interaction.guild.id)
             query = random.choice(RANDOM_QUERIES)
-            track = await search_ytdlp(query)
+            track = await search_track(query)
             if not track:
                 await interaction.followup.send("❌ Erro ao buscar música aleatória.", ephemeral=True)
                 return
@@ -499,7 +499,7 @@ def setup_commands(tree: app_commands.CommandTree, bot):
             data = get_guild_data(interaction.guild.id)
             count = 0
             for q in playlists[uid][nome]:
-                track = await search_ytdlp(q)
+                track = await search_track(q)
                 if track:
                     data["queue"].append(track)
                     count += 1
