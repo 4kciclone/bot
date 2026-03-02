@@ -128,7 +128,7 @@ def setup_commands(tree: app_commands.CommandTree, bot):
                 ("💍・casamentos",      "text", "Log de casamentos e divórcios.",     ow_bot_dedicated(432610292342587392)),
             ]),
             ("🎨 GARTIC & FUN", [
-                ("🎨・gartic-game",     "text", "Desenhe e adivinhe com o Gartic!",   ow_bot_dedicated(694921670984138762)),
+                ("🎨・gartic-game",     "text", "Desenhe e adivinhe com o Gartic!",   ow_bot_dedicated(487328045275938828)),
                 ("🐸・dank-memer",      "text", "Economia e memes com o Dank!",       ow_bot_dedicated(270904126974590976)),
             ]),
             ("🎵 MÚSICA", [
@@ -337,7 +337,7 @@ def setup_commands(tree: app_commands.CommandTree, bot):
         view = discord.ui.View()
         view.add_item(discord.ui.Button(label="🎵 Jockie Music", url="https://www.jockiemusic.com/invite", style=discord.ButtonStyle.link))
         view.add_item(discord.ui.Button(label="💎 Mudae", url="https://discord.com/oauth2/authorize?client_id=432610292342587392&scope=bot&permissions=537213952", style=discord.ButtonStyle.link))
-        view.add_item(discord.ui.Button(label="🎨 Gartic", url="https://discord.com/oauth2/authorize?client_id=694921670984138762&scope=bot&permissions=277025810432", style=discord.ButtonStyle.link))
+        view.add_item(discord.ui.Button(label="🎨 Gartic", url="https://discord.com/oauth2/authorize?client_id=487328045275938828&scope=bot&permissions=277025810432", style=discord.ButtonStyle.link))
         view.add_item(discord.ui.Button(label="🐸 Dank Memer", url="https://discord.com/oauth2/authorize?client_id=270904126974590976&scope=bot&permissions=8", style=discord.ButtonStyle.link))
 
         embed.set_footer(text="Gato Comics • A sua editora de webtoons 🐱")
