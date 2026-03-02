@@ -24,6 +24,12 @@ def setup_commands(tree: app_commands.CommandTree, bot):
             {"name": "💎 Leitor VIP",               "color": discord.Color.from_rgb(255,105,180),   "hoist": True},
             {"name": "📖 Leitor",                   "color": discord.Color.light_grey(),             "hoist": False},
             {"name": "🆕 Novato",                   "color": discord.Color.default(),               "hoist": False},
+            # Novos cargos de orquestração
+            {"name": "🎧 DJ",                       "color": discord.Color.teal(),                  "hoist": True},
+            {"name": "💍 Waifu Collector",          "color": discord.Color.from_rgb(255,192,203),   "hoist": False},
+            {"name": "🖌️ Mestre do Gartic",         "color": discord.Color.from_rgb(255,255,0),     "hoist": False},
+            {"name": "🐸 Dank Member",              "color": discord.Color.dark_green(),            "hoist": False},
+            # Conquistas
             {"name": "🌟 Destaque",                 "color": discord.Color.from_rgb(255,215,0),     "hoist": False},
             {"name": "💜 Apoiador",                 "color": discord.Color.from_rgb(148,0,211),     "hoist": False},
             {"name": "🔥 Lenda",                    "color": discord.Color.from_rgb(255,69,0),      "hoist": False},
@@ -46,6 +52,8 @@ def setup_commands(tree: app_commands.CommandTree, bot):
 
         novato = cr["🆕 Novato"]; leitor = cr["📖 Leitor"]
         mod = cr["🛡️ Moderador"]; admin = cr["⚙️ Admin"]; owner = cr["👑 Owner"]
+        dj_role = cr["🎧 DJ"]; waifu_role = cr["💍 Waifu Collector"]
+        
         await guild.default_role.edit(permissions=discord.Permissions(view_channel=False))
 
         def ow_default():
@@ -57,11 +65,21 @@ def setup_commands(tree: app_commands.CommandTree, bot):
                 admin:  discord.PermissionOverwrite(view_channel=True, send_messages=True, manage_channels=True),
                 owner:  discord.PermissionOverwrite(view_channel=True, send_messages=True, manage_channels=True),
             }
+        
+        def ow_bot_dedicated(bot_id: int):
+            # Tenta encontrar o bot no servidor para dar permissão específica
+            overwrites = ow_default()
+            bot_member = guild.get_member(bot_id)
+            if bot_member:
+                overwrites[bot_member] = discord.PermissionOverwrite(view_channel=True, send_messages=True, embed_links=True, attach_files=True, use_external_emojis=True)
+            return overwrites
+
         def ow_readonly():
             d = ow_default()
             d[novato] = discord.PermissionOverwrite(view_channel=True, send_messages=False)
             d[leitor] = discord.PermissionOverwrite(view_channel=True, send_messages=False)
             return d
+        
         def ow_staff():
             return {
                 guild.default_role: discord.PermissionOverwrite(view_channel=False),
@@ -69,6 +87,7 @@ def setup_commands(tree: app_commands.CommandTree, bot):
                 admin: discord.PermissionOverwrite(view_channel=True, send_messages=True),
                 owner: discord.PermissionOverwrite(view_channel=True, send_messages=True),
             }
+        
         def ow_stats():
             return {
                 guild.default_role: discord.PermissionOverwrite(view_channel=False),
@@ -104,16 +123,23 @@ def setup_commands(tree: app_commands.CommandTree, bot):
                 ("📊・enquetes",            "text", "Enquetes da comunidade.",         ow_default()),
                 ("🎁・sorteios",            "text", "Sorteios oficiais.",              ow_default()),
             ]),
-            ("🎮 JOGOS", [
-                ("🎮・jogos",           "text", "Use os comandos de jogos aqui!",     ow_default()),
-                ("🏅・placar",          "text", "Placar dos jogos e torneios.",        ow_readonly()),
+            ("💍 MUDAE", [
+                ("💍・mudae-waifus",    "text", "Colecione seus personagens aqui!",   ow_bot_dedicated(432610292342587392)),
+                ("💍・casamentos",      "text", "Log de casamentos e divórcios.",     ow_bot_dedicated(432610292342587392)),
             ]),
-            ("🎵 VOZ & MÚSICA", [
-                ("🎵・comandos-musica", "text",  "Use comandos de música aqui.",      ow_default()),
+            ("🎨 GARTIC & FUN", [
+                ("🎨・gartic-game",     "text", "Desenhe e adivinhe com o Gartic!",   ow_bot_dedicated(694921670984138762)),
+                ("🐸・dank-memer",      "text", "Economia e memes com o Dank!",       ow_bot_dedicated(270904126974590976)),
+            ]),
+            ("🎵 MÚSICA", [
+                ("🎵・pedir-musica",    "text",  "Use comandos de música aqui.",      ow_bot_dedicated(411916947773587459)),
+                ("🔊 Sala de Música 1", "voice", "",                                  ow_default()),
+                ("🔊 Sala de Música 2", "voice", "",                                  ow_default()),
+            ]),
+            ("🔊 VOZ GERAL", [
                 ("🔊 Sala Geral",       "voice", "",                                  ow_default()),
                 ("📚 Clube de Leitura", "voice", "",                                  ow_default()),
                 ("🎮 Gaming",           "voice", "",                                  ow_default()),
-                ("🎵 Música",           "voice", "",                                  ow_default()),
             ]),
             ("🏆 RANKING", [
                 ("🏆・ranking",    "text", "Top membros mais ativos.",               ow_readonly()),
@@ -229,7 +255,7 @@ def setup_commands(tree: app_commands.CommandTree, bot):
                     "A editora digital de webtoons 100% brasileira!\n\n"
                     f"📋 Leia as {rules_ch.mention}\n"
                     "🎭 Se apresente no canal de apresentações!\n"
-                    "🎮 Jogue, ganhe XP e suba de nível!"
+                    "🎮 Jogue com Mudae, Gartic e ganhe XP!"
                 ),
                 color=0xFF6B9D
             )
@@ -242,8 +268,8 @@ def setup_commands(tree: app_commands.CommandTree, bot):
             await send_ticket_panel(ticket_ch)
 
         embed_done = discord.Embed(
-            title="✅ Setup Gato Comics concluído!",
-            description="\n".join([f"✅ {l}" for l in logs[-25:]]),
+            title="✅ Orquestração Gato Comics concluída!",
+            description="Todos os cargos e canais foram configurados. Agora convide os bots auxiliares clicando em `/ajuda`!",
             color=discord.Color.green()
         )
         await interaction.followup.send(embed=embed_done, ephemeral=True)
