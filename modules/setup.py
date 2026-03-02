@@ -57,7 +57,7 @@ def setup_commands(tree: app_commands.CommandTree, bot):
         await guild.default_role.edit(permissions=discord.Permissions(view_channel=False))
 
         def ow_default():
-            return {
+            base = {
                 guild.default_role: discord.PermissionOverwrite(view_channel=False),
                 novato: discord.PermissionOverwrite(view_channel=True, send_messages=False),
                 leitor: discord.PermissionOverwrite(view_channel=True, send_messages=True),
@@ -65,6 +65,13 @@ def setup_commands(tree: app_commands.CommandTree, bot):
                 admin:  discord.PermissionOverwrite(view_channel=True, send_messages=True, manage_channels=True),
                 owner:  discord.PermissionOverwrite(view_channel=True, send_messages=True, manage_channels=True),
             }
+            # Bloquear bots externos de canais comuns (Poluentes)
+            external_bots = [411916947773587459, 432610292342587392, 487328045275938828, 270904126974590976]
+            for bid in external_bots:
+                bot_user = guild.get_member(bid)
+                if bot_user:
+                    base[bot_user] = discord.PermissionOverwrite(view_channel=False)
+            return base
         
         def ow_bot_dedicated(bot_id: int):
             # Tenta encontrar o bot no servidor para dar permissão específica
@@ -126,6 +133,7 @@ def setup_commands(tree: app_commands.CommandTree, bot):
             ]),
             ("💬 COMUNIDADE", [
                 ("🗨️・bate-papo",          "text", "Conversa geral.",                 ow_default()),
+                ("🤖・comandos-bot",       "text", "Use os comandos do Gato Comics aqui!",ow_default()),
                 ("😂・memes-e-cultura-pop", "text", "Memes e trends.",                 ow_default()),
                 ("🎮・off-topic",           "text", "Qualquer assunto aqui!",          ow_default()),
                 ("📊・enquetes",            "text", "Enquetes da comunidade.",         ow_default()),
@@ -367,12 +375,20 @@ def setup_commands(tree: app_commands.CommandTree, bot):
             inline=False
         )
 
-        # Botões de link
-        view = discord.ui.View()
-        view.add_item(discord.ui.Button(label="🎵 Jockie Music", url="https://www.jockiemusic.com/invite", style=discord.ButtonStyle.link))
-        view.add_item(discord.ui.Button(label="💎 Mudae", url="https://discord.com/oauth2/authorize?client_id=432610292342587392&scope=bot&permissions=537213952", style=discord.ButtonStyle.link))
-        view.add_item(discord.ui.Button(label="🎨 Gartic", url="https://discord.com/oauth2/authorize?client_id=487328045275938828&scope=bot&permissions=277025810432", style=discord.ButtonStyle.link))
-        view.add_item(discord.ui.Button(label="🐸 Dank Memer", url="https://discord.com/oauth2/authorize?client_id=270904126974590976&scope=bot&permissions=8", style=discord.ButtonStyle.link))
-
         embed.set_footer(text="Gato Comics • A sua editora de webtoons 🐱")
-        await interaction.response.send_message(embed=embed, view=view)
+        await interaction.response.send_message(embed=embed)
+
+    @tree.command(name="admin-links", description="🔗 Links de convite para os bots auxiliares (APENAS STAFF)")
+    @staff_only()
+    async def admin_links(interaction: discord.Interaction):
+        embed = discord.Embed(
+            title="🔗 Links de Orquestração",
+            description="Use os links abaixo para convidar os bots recomendados. **Apenas administradores podem ver esta mensagem.**",
+            color=discord.Color.blue()
+        )
+        embed.add_field(name="🎵 Jockie Music", value="[Convidar](https://www.jockiemusic.com/invite)", inline=True)
+        embed.add_field(name="💎 Mudae", value="[Convidar](https://discord.com/oauth2/authorize?client_id=432610292342587392&scope=bot&permissions=537213952)", inline=True)
+        embed.add_field(name="🎨 Gartic", value="[Convidar](https://discord.com/oauth2/authorize?client_id=487328045275938828&scope=bot&permissions=277025810432)", inline=True)
+        embed.add_field(name="🐸 Dank Memer", value="[Convidar](https://discord.com/oauth2/authorize?client_id=270904126974590976&scope=bot&permissions=8)", inline=True)
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
