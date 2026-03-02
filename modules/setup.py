@@ -170,6 +170,7 @@ def setup_commands(tree: app_commands.CommandTree, bot):
 
         ticket_ch = rules_ch = updates_ch = None
 
+        for cat_name, channels in structure:
             cat = discord.utils.get(guild.categories, name=cat_name)
             if not cat:
                 cat = await guild.create_category(cat_name, overwrites=ow_default())
@@ -270,13 +271,14 @@ def setup_commands(tree: app_commands.CommandTree, bot):
 
         # Boas vindas
         wch = discord.utils.get(guild.channels, name=WELCOME_CHANNEL)
+        rules_mention = rules_ch.mention if rules_ch else "#regras"
         if wch:
             embed = discord.Embed(
                 title="🐱 Bem-vindo à Gato Comics!",
                 description=(
                     "Olá! Você chegou na comunidade oficial da **Gato Comics** 🇧🇷\n"
                     "A editora digital de webtoons 100% brasileira!\n\n"
-                    f"📋 Leia as {rules_ch.mention}\n"
+                    f"📋 Leia as {rules_mention}\n"
                     "🎭 Se apresente no canal de apresentações!\n"
                     "🎮 Jogue com Mudae, Gartic e ganhe XP!"
                 ),

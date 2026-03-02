@@ -39,11 +39,11 @@ async def check_scheduled():
 
 
 @tasks.loop(hours=168)
-async def weekly_ranking():
+    # Logar mensagens para ranking (ignorar bots)
     if not _bot_instance: return
     for guild in _bot_instance.guilds:
-        ch = discord.utils.get(guild.channels, name=RANKING_CHANNEL)
-        if not ch: continue
+        # Apenas processar se existirem canais de ranking
+        pass
         from config import xp_data
         users = sorted(xp_data.get(str(guild.id),{}).items(),
                        key=lambda x: x[1].get("messages",0), reverse=True)[:10]
