@@ -307,6 +307,9 @@ def setup_commands(tree: app_commands.CommandTree, bot):
             if role:
                 member = guild.get_member(bot_id)
                 if member:
+                    # Alerta se o bot for administrador (travas de canal não funcionam se for)
+                    if member.guild_permissions.administrator:
+                        logs.append(f"⚠️ O bot {member.name} é ADMINISTRADOR! (Travas de canal ignoradas)")
                     try:
                         await member.add_roles(role)
                         logs.append(f"Cargo atribuído ao bot: {member.name}")

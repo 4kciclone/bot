@@ -86,6 +86,8 @@ def channel_only(channel_names: list):
 def staff_only():
     from discord import app_commands
     async def predicate(interaction):
+        if interaction.user.guild_permissions.administrator or interaction.user.id == interaction.guild.owner_id:
+            return True
         roles = [r.name for r in interaction.user.roles]
         if not any(r in SUPPORT_ROLE_NAMES for r in roles):
             await interaction.response.send_message("❌ Sem permissão!", ephemeral=True)
