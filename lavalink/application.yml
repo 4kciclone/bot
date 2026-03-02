@@ -7,7 +7,7 @@ server:
 lavalink:
   plugins:
     # Plugin oficial do YouTube para Lavalink v4
-    - dependency: "dev.lavalink.youtube:youtube-plugin:1.8.3"
+    - dependency: "dev.lavalink.youtube:youtube-plugin:1.18.0"
       repository: "https://maven.lavalink.dev/releases"
 
   server:
@@ -54,7 +54,7 @@ plugins:
       - TVHTML5EMBEDDED  # TV embutido — mais confiável, contorna restrições
       - IOS              # Cliente iOS — estável, bom fallback
       - MUSIC            # YouTube Music — fallback adicional
-    # cookies: "/root/gatocomics-bot/cookies.txt"  # descomente se tiver cookies exportados do YouTube
+    cookies: "/root/gatocomics-bot/cookies.txt"  # cookies para autenticação
     oauth:
       enabled: false
 
