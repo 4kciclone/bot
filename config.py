@@ -7,6 +7,11 @@ TOKEN            = os.getenv("TOKEN")
 GUILD_ID         = int(os.getenv("GUILD_ID", 0))
 NVIDIA_API_KEY   = os.getenv("NVIDIA_API_KEY")
 
+# Lavalink
+LAVALINK_HOST     = os.getenv("LAVALINK_HOST",     "localhost")
+LAVALINK_PORT     = int(os.getenv("LAVALINK_PORT", 2333))
+LAVALINK_PASSWORD = os.getenv("LAVALINK_PASSWORD", "youshallnotpass")
+
 MUSIC_CHANNEL    = os.getenv("MUSIC_CHANNEL",    "🎵・comandos-musica")
 TICKET_CHANNEL   = os.getenv("TICKET_CHANNEL",   "🎫・abrir-ticket")
 ANNOUNCE_CHANNEL = os.getenv("ANNOUNCE_CHANNEL", "📣・anúncios")

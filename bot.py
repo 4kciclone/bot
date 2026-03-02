@@ -3,7 +3,8 @@ from discord.ext import commands
 from discord import app_commands
 import asyncio
 import datetime
-from config import TOKEN, WELCOME_CHANNEL, CONQUEST_CHANNEL, STATS_CATEGORY
+import wavelink
+from config import TOKEN, WELCOME_CHANNEL, CONQUEST_CHANNEL, STATS_CATEGORY, LAVALINK_HOST, LAVALINK_PORT, LAVALINK_PASSWORD
 
 # ─────────────────────────────────────────
 #  Inicialização
@@ -11,6 +12,20 @@ from config import TOKEN, WELCOME_CHANNEL, CONQUEST_CHANNEL, STATS_CATEGORY
 intents = discord.Intents.all()
 bot     = commands.Bot(command_prefix="g!", intents=intents)
 tree    = bot.tree
+
+
+# ─────────────────────────────────────────
+#  Lavalink — conectar antes do on_ready
+# ─────────────────────────────────────────
+@bot.event
+async def setup_hook():
+    """Conecta ao servidor Lavalink antes do bot ficar online."""
+    node = wavelink.Node(
+        uri=f"http://{LAVALINK_HOST}:{LAVALINK_PORT}",
+        password=LAVALINK_PASSWORD,
+    )
+    await wavelink.Pool.connect(nodes=[node], client=bot, cache_capacity=100)
+    print(f"🎵 Lavalink conectado em {LAVALINK_HOST}:{LAVALINK_PORT}")
 
 
 # ─────────────────────────────────────────

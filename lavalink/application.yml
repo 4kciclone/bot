@@ -1,0 +1,81 @@
+server:
+  port: 2333
+  address: 0.0.0.0
+  http2:
+    enabled: false
+
+lavalink:
+  plugins:
+    # Plugin oficial do YouTube (substitui o extrator padrão e contorna bloqueios)
+    - dependency: "dev.lavalink.youtube:youtube-plugin:1.11.5"
+      repository: "https://maven.lavalink.dev/releases"
+
+  server:
+    password: "youshallnotpass"
+    sources:
+      youtube: false      # desabilita extrator embutido — usamos o plugin
+      bandcamp: true
+      soundcloud: true
+      twitch: true
+      vimeo: true
+      http: true
+      local: false
+    filters:
+      volume: true
+      equalizer: true
+      karaoke: true
+      timescale: true
+      tremolo: true
+      vibrato: true
+      distortion: true
+      rotation: true
+      channelMix: true
+      lowPass: true
+    bufferDurationMs: 400
+    frameBufferDurationMs: 5000
+    opusEncodingQuality: 10
+    resamplingQuality: LOW
+    trackStuckThresholdMs: 10000
+    useSeekGhosting: true
+    youtubePlaylistLoadLimit: 6
+    playerUpdateInterval: 5
+    youtubeSearchEnabled: true
+    soundcloudSearchEnabled: true
+    gc-warnings: true
+
+# Plugin YouTube — configuração extra
+plugins:
+  youtube:
+    enabled: true
+    allowSearch: true
+    allowDirectVideoIds: true
+    allowDirectPlaylistIds: true
+    clients:
+      - MUSIC
+      - ANDROID_TESTSUITE
+      - TV_SIMPLY_EMBEDDED_PLAYER
+      - WEB
+      - TVHTML5SIMPLY_EMBEDDED_PLAYER
+
+metrics:
+  prometheus:
+    enabled: false
+    endpoint: /metrics
+
+sentry:
+  dsn: ""
+  environment: ""
+
+logging:
+  file:
+    path: ./logs/
+  level:
+    root: INFO
+    lavalink: INFO
+  request:
+    enabled: true
+    includeClientInfo: true
+    includeHeaders: false
+    includeQueryString: true
+    includePayload: true
+    maxPayloadLength: 10000
