@@ -3,7 +3,8 @@ from discord import app_commands
 from discord.ext import commands
 import asyncio
 import random
-import wavelink
+import subprocess
+import json
 from config import *
 
 # ── Playlists salvas em memória ────────────────────────────────────────────────
@@ -14,6 +15,21 @@ RANDOM_QUERIES = [
     "manga soundtrack", "webtoon ost", "K-pop hits 2024",
     "anime soundtrack epic", "vocaloid songs", "city pop japanese",
 ]
+
+# ── Estado do player por guild ─────────────────────────────────────────────────
+guild_queues = {}  # {guild_id: {"queue": [], "current": None, "repeat": False, "volume": 0.5}}
+
+YTDLP_OPTS = [
+    "yt-dlp", "--no-warnings", "-q",
+    "-f", "bestaudio/best",
+    "--no-playlist",
+    "-o", "-",  # stdout
+]
+
+FFMPEG_OPTS = {
+    "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
+    "options": "-vn -b:a 128k",
+}
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -31,91 +47,108 @@ def music_only():
     return app_commands.check(predicate)
 
 
-async def get_player(interaction: discord.Interaction) -> wavelink.Player | None:
-    """Retorna o Player do guild, conectando ao canal de voz se necessário."""
-    if not interaction.user.voice:
-        await interaction.followup.send("❌ Entre em um canal de voz primeiro!", ephemeral=True)
-        return None
+def get_guild_data(guild_id):
+    """Retorna ou cria dados do guild."""
+    if guild_id not in guild_queues:
+        guild_queues[guild_id] = {
+            "queue": [],
+            "current": None,
+            "repeat": False,
+            "volume": 0.5,
+        }
+    return guild_queues[guild_id]
 
-    # Verificar se Lavalink está conectado
+
+async def search_ytdlp(query: str) -> dict | None:
+    """Busca uma faixa via yt-dlp. Retorna dict com title, url, duration, webpage_url."""
     try:
-        nodes = wavelink.Pool.nodes
-        if not nodes:
-            await interaction.followup.send("❌ Lavalink não está conectado. Aguarde uns segundos e tente novamente.", ephemeral=True)
+        if query.startswith("http"):
+            cmd = ["yt-dlp", "--no-warnings", "-q", "-j", "--no-playlist", query]
+        else:
+            cmd = ["yt-dlp", "--no-warnings", "-q", "-j", "--no-playlist",
+                   f"ytsearch:{query}"]
+
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
+
+        if proc.returncode != 0:
+            print(f"[MÚSICA] ⚠️ yt-dlp erro: {stderr.decode()[:200]}", flush=True)
             return None
-    except Exception:
-        await interaction.followup.send("❌ Lavalink não está disponível.", ephemeral=True)
+
+        data = json.loads(stdout.decode())
+        # Pegar URL do melhor formato de áudio
+        url = data.get("url")
+        if not url:
+            # Tentar extrair de formatos
+            formats = data.get("formats", [])
+            audio_formats = [f for f in formats if f.get("acodec") != "none" and f.get("url")]
+            if audio_formats:
+                url = audio_formats[-1]["url"]
+
+        if not url:
+            print(f"[MÚSICA] ❌ Sem URL de áudio para: {query}", flush=True)
+            return None
+
+        return {
+            "title": data.get("title", "Desconhecido"),
+            "url": url,
+            "duration": data.get("duration", 0),
+            "webpage_url": data.get("webpage_url", ""),
+        }
+    except asyncio.TimeoutError:
+        print(f"[MÚSICA] ❌ Timeout buscando: {query}", flush=True)
         return None
-
-    vc: wavelink.Player = interaction.guild.voice_client  # type: ignore
-
-    # Se já tem conexão, verificar se está funcional
-    if vc is not None:
-        if vc.connected:
-            return vc
-        # Conexão fantasma — desconectar antes de reconectar
-        try:
-            await vc.disconnect(force=True)
-        except Exception:
-            pass
-        vc = None
-
-    # Conectar ao canal de voz
-    try:
-        vc = await interaction.user.voice.channel.connect(cls=wavelink.Player, timeout=60.0, self_deaf=True)
-        vc.autoplay = wavelink.AutoPlayMode.disabled
     except Exception as e:
-        print(f"[PLAY] ❌ Erro ao conectar ao canal de voz: {e}", flush=True)
-        await interaction.followup.send(f"❌ Não consegui entrar no canal de voz: {e}", ephemeral=True)
+        print(f"[MÚSICA] ❌ Erro: {e}", flush=True)
         return None
 
-    return vc
 
+async def play_next(guild: discord.Guild):
+    """Toca a próxima música da fila."""
+    data = get_guild_data(guild.id)
+    vc: discord.VoiceClient = guild.voice_client
 
+    if not vc or not vc.is_connected():
+        return
 
-async def search_track(query: str) -> wavelink.Playable | None:
-    """Busca uma faixa via LavaSrc/yt-dlp."""
-    # URL direta
-    if query.startswith("http"):
-        try:
-            result = await wavelink.Playable.search(query)
-            if result:
-                return result[0] if isinstance(result, list) else result
-        except Exception as e:
-            print(f"[MÚSICA] Erro URL: {e}", flush=True)
-        return None
+    # Repeat mode
+    if data["repeat"] and data["current"]:
+        track = data["current"]
+    elif data["queue"]:
+        track = data["queue"].pop(0)
+        data["current"] = track
+    else:
+        data["current"] = None
+        print("[FILA] Fila vazia, parando.", flush=True)
+        await asyncio.sleep(120)  # espera 2 min antes de desconectar
+        if guild.voice_client and not guild.voice_client.is_playing():
+            await guild.voice_client.disconnect(force=True)
+        return
 
-    # yt-dlp search (prefixo ytdlpsearch:)
-    for prefix in ("ytsearch",):
-        try:
-            result = await wavelink.Playable.search(f"{prefix}:{query}")
-            if result:
-                track = result[0] if isinstance(result, list) else result
-                print(f"[MÚSICA] ✅ {prefix}: {track.title}", flush=True)
-                return track
-        except Exception as e:
-            print(f"[MÚSICA] ⚠️ {prefix} falhou: {e}", flush=True)
+    try:
+        print(f"[FILA] ▶️ Tocando: {track['title']}", flush=True)
+        source = discord.FFmpegPCMAudio(track["url"], **FFMPEG_OPTS)
+        source = discord.PCMVolumeTransformer(source, volume=data["volume"])
 
-    print(f"[MÚSICA] ❌ Não encontrado: {query}", flush=True)
-    return None
+        def after_play(error):
+            if error:
+                print(f"[FILA] ❌ Erro playback: {error}", flush=True)
+            # Agendar próxima música
+            asyncio.run_coroutine_threadsafe(play_next(guild), guild._state.loop)
 
-
-
-
-async def search_playlist(url: str) -> list[wavelink.Playable]:
-    """Busca todas as faixas de uma playlist."""
-    result = await wavelink.Playable.search(url)
-    if isinstance(result, wavelink.Playlist):
-        return list(result.tracks)
-    elif isinstance(result, list):
-        return result
-    return []
+        vc.play(source, after=after_play)
+    except Exception as e:
+        print(f"[FILA] ❌ Erro ao iniciar: {e}", flush=True)
+        asyncio.run_coroutine_threadsafe(play_next(guild), guild._state.loop)
 
 
 # ── Setup de Comandos ──────────────────────────────────────────────────────────
 
 def setup_commands(tree: app_commands.CommandTree, bot):
-
 
     # ── Erro global ─────────────────────────────────────────────────────────
     @tree.error
@@ -138,48 +171,52 @@ def setup_commands(tree: app_commands.CommandTree, bot):
         await interaction.response.defer()
 
         try:
-            vc = await get_player(interaction)
+            if not interaction.user.voice:
+                await interaction.followup.send("❌ Entre em um canal de voz primeiro!", ephemeral=True)
+                return
+
+            vc: discord.VoiceClient = interaction.guild.voice_client
             if vc is None:
-                return
+                vc = await interaction.user.voice.channel.connect(timeout=30.0, self_deaf=True)
+            elif not vc.is_connected():
+                try:
+                    await vc.disconnect(force=True)
+                except:
+                    pass
+                vc = await interaction.user.voice.channel.connect(timeout=30.0, self_deaf=True)
 
-            # ── Playlist ─────────────────────────────────────────────────────
-            if "playlist" in musica.lower() or "list=" in musica or "album" in musica.lower():
-                tracks = await search_playlist(musica)
-                if not tracks:
-                    await interaction.followup.send("❌ Playlist não encontrada.", ephemeral=True)
-                    return
-                limited = tracks[:50]
-                for t in limited:
-                    await vc.queue.put_wait(t)
-                embed = discord.Embed(
-                    description=f"📋 **{len(limited)} músicas** adicionadas da playlist!",
-                    color=0xFF6B9D,
-                )
-                if not vc.playing:
-                    await vc.play(vc.queue.get())
-                await interaction.followup.send(embed=embed)
-                return
+            data = get_guild_data(interaction.guild.id)
 
-            # ── Faixa única ───────────────────────────────────────────────────
-            track = await search_track(musica)
+            # Buscar música
+            track = await search_ytdlp(musica)
             if not track:
                 await interaction.followup.send("❌ Não encontrei essa música.", ephemeral=True)
                 return
 
-            source_icon = "🎵 YouTube"
+            print(f"[MÚSICA] ✅ {track['title']}", flush=True)
 
-            if vc.playing or not vc.queue.is_empty:
-                await vc.queue.put_wait(track)
+            if vc.is_playing() or data["queue"]:
+                data["queue"].append(track)
                 embed = discord.Embed(
-                    description=f"📋 **{track.title}** adicionada à fila! (#{vc.queue.count}) {source_icon}",
+                    description=f"📋 **{track['title']}** adicionada à fila! (#{len(data['queue'])})",
                     color=0xFF6B9D,
                 )
             else:
-                await vc.play(track)
+                data["current"] = track
                 embed = discord.Embed(
-                    description=f"▶️ Tocando: **{track.title}** {source_icon}",
+                    description=f"▶️ Tocando: **{track['title']}** 🎵",
                     color=0xFF6B9D,
                 )
+                source = discord.FFmpegPCMAudio(track["url"], **FFMPEG_OPTS)
+                source = discord.PCMVolumeTransformer(source, volume=data["volume"])
+
+                def after_play(error):
+                    if error:
+                        print(f"[FILA] ❌ Erro: {error}", flush=True)
+                    asyncio.run_coroutine_threadsafe(play_next(interaction.guild), bot.loop)
+
+                vc.play(source, after=after_play)
+
             await interaction.followup.send(embed=embed)
 
         except Exception as e:
@@ -191,44 +228,65 @@ def setup_commands(tree: app_commands.CommandTree, bot):
             except:
                 pass
 
-
     # ── /playaleatorio ───────────────────────────────────────────────────────
     @tree.command(name="playaleatorio", description="🎲 Toca uma música aleatória de anime/webtoon")
     @music_only()
     async def play_random(interaction: discord.Interaction):
         await interaction.response.defer()
 
-        vc = await get_player(interaction)
-        if vc is None:
-            return
+        try:
+            if not interaction.user.voice:
+                await interaction.followup.send("❌ Entre em um canal de voz primeiro!", ephemeral=True)
+                return
 
-        query = random.choice(RANDOM_QUERIES)
-        track = await search_track(query)
-        if not track:
-            await interaction.followup.send("❌ Erro ao buscar música aleatória.", ephemeral=True)
-            return
+            vc: discord.VoiceClient = interaction.guild.voice_client
+            if vc is None:
+                vc = await interaction.user.voice.channel.connect(timeout=30.0, self_deaf=True)
 
-        if vc.playing or not vc.queue.is_empty:
-            await vc.queue.put_wait(track)
-            embed = discord.Embed(
-                description=f"🎲 Surpresa! **{track.title}** na fila!",
-                color=0xFF6B9D,
-            )
-        else:
-            await vc.play(track)
-            embed = discord.Embed(
-                description=f"🎲 Tocando aleatório: **{track.title}**",
-                color=0xFF6B9D,
-            )
-        await interaction.followup.send(embed=embed)
+            data = get_guild_data(interaction.guild.id)
+            query = random.choice(RANDOM_QUERIES)
+            track = await search_ytdlp(query)
+            if not track:
+                await interaction.followup.send("❌ Erro ao buscar música aleatória.", ephemeral=True)
+                return
+
+            if vc.is_playing() or data["queue"]:
+                data["queue"].append(track)
+                embed = discord.Embed(
+                    description=f"🎲 Surpresa! **{track['title']}** na fila!",
+                    color=0xFF6B9D,
+                )
+            else:
+                data["current"] = track
+                embed = discord.Embed(
+                    description=f"🎲 Tocando aleatório: **{track['title']}**",
+                    color=0xFF6B9D,
+                )
+                source = discord.FFmpegPCMAudio(track["url"], **FFMPEG_OPTS)
+                source = discord.PCMVolumeTransformer(source, volume=data["volume"])
+
+                def after_play(error):
+                    if error:
+                        print(f"[FILA] ❌ Erro: {error}", flush=True)
+                    asyncio.run_coroutine_threadsafe(play_next(interaction.guild), bot.loop)
+
+                vc.play(source, after=after_play)
+
+            await interaction.followup.send(embed=embed)
+        except Exception as e:
+            print(f"[PLAY] ❌ ERRO: {e}", flush=True)
+            try:
+                await interaction.followup.send(f"❌ Erro: {e}", ephemeral=True)
+            except:
+                pass
 
     # ── /skip ────────────────────────────────────────────────────────────────
     @tree.command(name="skip", description="⏭️ Pula para a próxima música")
     @music_only()
     async def skip(interaction: discord.Interaction):
-        vc: wavelink.Player = interaction.guild.voice_client  # type: ignore
-        if vc and (vc.playing or vc.paused):
-            await vc.skip(force=True)
+        vc: discord.VoiceClient = interaction.guild.voice_client
+        if vc and vc.is_playing():
+            vc.stop()  # vai chamar after_play que toca a próxima
             await interaction.response.send_message("⏭️ Pulando!", ephemeral=True)
         else:
             await interaction.response.send_message("❌ Nada tocando.", ephemeral=True)
@@ -237,9 +295,9 @@ def setup_commands(tree: app_commands.CommandTree, bot):
     @tree.command(name="pause", description="⏸️ Pausa a música")
     @music_only()
     async def pause(interaction: discord.Interaction):
-        vc: wavelink.Player = interaction.guild.voice_client  # type: ignore
-        if vc and vc.playing:
-            await vc.pause(True)
+        vc: discord.VoiceClient = interaction.guild.voice_client
+        if vc and vc.is_playing():
+            vc.pause()
             await interaction.response.send_message("⏸️ Pausado.", ephemeral=True)
         else:
             await interaction.response.send_message("❌ Nada tocando.", ephemeral=True)
@@ -248,9 +306,9 @@ def setup_commands(tree: app_commands.CommandTree, bot):
     @tree.command(name="resume", description="▶️ Retoma a música")
     @music_only()
     async def resume(interaction: discord.Interaction):
-        vc: wavelink.Player = interaction.guild.voice_client  # type: ignore
-        if vc and vc.paused:
-            await vc.pause(False)
+        vc: discord.VoiceClient = interaction.guild.voice_client
+        if vc and vc.is_paused():
+            vc.resume()
             await interaction.response.send_message("▶️ Retomado.", ephemeral=True)
         else:
             await interaction.response.send_message("❌ Nada pausado.", ephemeral=True)
@@ -259,10 +317,13 @@ def setup_commands(tree: app_commands.CommandTree, bot):
     @tree.command(name="stop", description="⏹️ Para e desconecta")
     @music_only()
     async def stop(interaction: discord.Interaction):
-        vc: wavelink.Player = interaction.guild.voice_client  # type: ignore
+        vc: discord.VoiceClient = interaction.guild.voice_client
         if vc:
-            vc.queue.clear()
-            await vc.stop()
+            data = get_guild_data(interaction.guild.id)
+            data["queue"].clear()
+            data["current"] = None
+            data["repeat"] = False
+            vc.stop()
             await vc.disconnect(force=True)
         await interaction.response.send_message("⏹️ Parado.", ephemeral=True)
 
@@ -270,14 +331,14 @@ def setup_commands(tree: app_commands.CommandTree, bot):
     @tree.command(name="queue", description="📋 Fila de músicas")
     @music_only()
     async def queue_cmd(interaction: discord.Interaction):
-        vc: wavelink.Player = interaction.guild.voice_client  # type: ignore
-        current = vc.current.title if vc and vc.current else "Nenhuma"
-        repeat_status = "🔁 ON" if (vc and vc.queue.mode == wavelink.QueueMode.loop) else "🔁 OFF"
-        fila = list(vc.queue) if vc else []
+        data = get_guild_data(interaction.guild.id)
+        current = data["current"]["title"] if data["current"] else "Nenhuma"
+        repeat_status = "🔁 ON" if data["repeat"] else "🔁 OFF"
+        fila = data["queue"]
 
         desc = f"▶️ **Tocando:** {current} | {repeat_status}\n\n"
         if fila:
-            desc += "\n".join([f"`{n+1}.` {t.title}" for n, t in enumerate(fila[:10])])
+            desc += "\n".join([f"`{n+1}.` {t['title']}" for n, t in enumerate(fila[:10])])
             if len(fila) > 10:
                 desc += f"\n*...e mais {len(fila)-10} músicas*"
         else:
@@ -291,15 +352,15 @@ def setup_commands(tree: app_commands.CommandTree, bot):
     @tree.command(name="nowplaying", description="🎵 Música tocando agora")
     @music_only()
     async def nowplaying(interaction: discord.Interaction):
-        vc: wavelink.Player = interaction.guild.voice_client  # type: ignore
-        if vc and vc.current:
-            track = vc.current
-            dur = f"{track.length // 60000}:{(track.length // 1000 % 60):02d}"
-            pos_ms = vc.position
-            pos = f"{pos_ms // 60000}:{(pos_ms // 1000 % 60):02d}"
-            desc = f"▶️ **{track.title}**\n⏱️ `{pos} / {dur}`"
-            if track.uri:
-                desc += f"\n🔗 [Link]({track.uri})"
+        data = get_guild_data(interaction.guild.id)
+        vc: discord.VoiceClient = interaction.guild.voice_client
+        if data["current"] and vc and vc.is_playing():
+            track = data["current"]
+            dur_s = track.get("duration", 0)
+            dur = f"{dur_s // 60}:{(dur_s % 60):02d}"
+            desc = f"▶️ **{track['title']}**\n⏱️ Duração: `{dur}`"
+            if track.get("webpage_url"):
+                desc += f"\n🔗 [Link]({track['webpage_url']})"
         else:
             desc = "❌ Nada tocando."
         await interaction.response.send_message(
@@ -310,23 +371,23 @@ def setup_commands(tree: app_commands.CommandTree, bot):
     @tree.command(name="volume", description="🔊 Ajusta volume (0-100)")
     @music_only()
     async def volume(interaction: discord.Interaction, valor: int):
-        vc: wavelink.Player = interaction.guild.voice_client  # type: ignore
-        if vc:
-            vol = max(0, min(valor, 100))
-            await vc.set_volume(vol)
-            await interaction.response.send_message(f"🔊 Volume: **{vol}%**", ephemeral=True)
-        else:
-            await interaction.response.send_message("❌ Nada tocando.", ephemeral=True)
+        vc: discord.VoiceClient = interaction.guild.voice_client
+        data = get_guild_data(interaction.guild.id)
+        vol = max(0, min(valor, 100))
+        data["volume"] = vol / 100.0
+        if vc and vc.source and hasattr(vc.source, 'volume'):
+            vc.source.volume = data["volume"]
+        await interaction.response.send_message(f"🔊 Volume: **{vol}%**", ephemeral=True)
 
     # ── /shuffle ─────────────────────────────────────────────────────────────
     @tree.command(name="shuffle", description="🔀 Embaralha a fila de músicas")
     @music_only()
     async def shuffle(interaction: discord.Interaction):
-        vc: wavelink.Player = interaction.guild.voice_client  # type: ignore
-        if vc and not vc.queue.is_empty:
-            vc.queue.shuffle()
+        data = get_guild_data(interaction.guild.id)
+        if data["queue"]:
+            random.shuffle(data["queue"])
             await interaction.response.send_message(
-                f"🔀 Fila embaralhada! ({vc.queue.count} músicas)", ephemeral=True
+                f"🔀 Fila embaralhada! ({len(data['queue'])} músicas)", ephemeral=True
             )
         else:
             await interaction.response.send_message("❌ Fila vazia.", ephemeral=True)
@@ -335,16 +396,9 @@ def setup_commands(tree: app_commands.CommandTree, bot):
     @tree.command(name="repeat", description="🔁 Ativa/desativa repetição da música atual")
     @music_only()
     async def repeat(interaction: discord.Interaction):
-        vc: wavelink.Player = interaction.guild.voice_client  # type: ignore
-        if not vc:
-            await interaction.response.send_message("❌ Nada tocando.", ephemeral=True)
-            return
-        if vc.queue.mode == wavelink.QueueMode.loop:
-            vc.queue.mode = wavelink.QueueMode.normal
-            status = "**desativada**"
-        else:
-            vc.queue.mode = wavelink.QueueMode.loop
-            status = "**ativada** 🔁"
+        data = get_guild_data(interaction.guild.id)
+        data["repeat"] = not data["repeat"]
+        status = "**ativada** 🔁" if data["repeat"] else "**desativada**"
         await interaction.response.send_message(f"Repetição {status}", ephemeral=True)
 
     # ── /playlist ────────────────────────────────────────────────────────────
@@ -380,17 +434,36 @@ def setup_commands(tree: app_commands.CommandTree, bot):
                 )
                 return
             await interaction.response.defer()
-            vc = await get_player(interaction)
-            if vc is None:
+
+            if not interaction.user.voice:
+                await interaction.followup.send("❌ Entre em um canal de voz!", ephemeral=True)
                 return
+
+            vc: discord.VoiceClient = interaction.guild.voice_client
+            if vc is None:
+                vc = await interaction.user.voice.channel.connect(timeout=30.0, self_deaf=True)
+
+            data = get_guild_data(interaction.guild.id)
             count = 0
             for q in playlists[uid][nome]:
-                track = await search_track(q)
+                track = await search_ytdlp(q)
                 if track:
-                    await vc.queue.put_wait(track)
+                    data["queue"].append(track)
                     count += 1
-            if not vc.playing and not vc.queue.is_empty:
-                await vc.play(vc.queue.get())
+
+            if not vc.is_playing() and data["queue"]:
+                track = data["queue"].pop(0)
+                data["current"] = track
+                source = discord.FFmpegPCMAudio(track["url"], **FFMPEG_OPTS)
+                source = discord.PCMVolumeTransformer(source, volume=data["volume"])
+
+                def after_play(error):
+                    if error:
+                        print(f"[FILA] ❌ Erro: {error}", flush=True)
+                    asyncio.run_coroutine_threadsafe(play_next(interaction.guild), bot.loop)
+
+                vc.play(source, after=after_play)
+
             await interaction.followup.send(
                 f"▶️ Tocando playlist **{nome}** ({count} músicas)!"
             )

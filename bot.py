@@ -3,8 +3,7 @@ from discord.ext import commands
 from discord import app_commands
 import asyncio
 import datetime
-import wavelink
-from config import TOKEN, WELCOME_CHANNEL, CONQUEST_CHANNEL, STATS_CATEGORY, LAVALINK_HOST, LAVALINK_PORT, LAVALINK_PASSWORD
+from config import TOKEN, WELCOME_CHANNEL, CONQUEST_CHANNEL, STATS_CATEGORY
 
 # ─────────────────────────────────────────
 #  Inicialização
@@ -14,19 +13,6 @@ bot     = commands.Bot(command_prefix="g!", intents=intents)
 tree    = bot.tree
 
 
-# ─────────────────────────────────────────
-#  Lavalink — conectar antes do on_ready
-# ─────────────────────────────────────────
-@bot.event
-async def setup_hook():
-    """Conecta ao servidor Lavalink antes do bot ficar online."""
-    scheme = "https" if LAVALINK_PORT == 443 else "http"
-    node = wavelink.Node(
-        uri=f"{scheme}://{LAVALINK_HOST}:{LAVALINK_PORT}",
-        password=LAVALINK_PASSWORD,
-    )
-    await wavelink.Pool.connect(nodes=[node], client=bot, cache_capacity=100)
-    print(f"🎵 Lavalink conectado em {scheme}://{LAVALINK_HOST}:{LAVALINK_PORT}")
 
 
 # ─────────────────────────────────────────
@@ -135,44 +121,7 @@ async def on_message(message):
     await bot.process_commands(message)
 
 
-@bot.event
-async def on_wavelink_track_end(payload: wavelink.TrackEndEventPayload):
-    """Avança a fila quando a faixa atual termina."""
-    player: wavelink.Player = payload.player
 
-    # Em wavelink 3.4.x payload.reason é uma string, não um enum
-    reason = str(payload.reason)  # ex: 'finished', 'loadFailed', 'stopped', 'replaced'
-    q_size = player.queue.count if player else "N/A"
-    connected = player.connected if player else False
-    print(f"[FILA] track_end | reason={reason} | fila={q_size} | connected={connected}", flush=True)
-
-    if not player or not player.connected:
-        return
-
-    # Só avança ao terminar, falhar ou parar (pular) — não ao substituir diretamente
-    if reason not in ("finished", "loadFailed", "stopped"):
-        print(f"[FILA] reason={reason} ignorado.", flush=True)
-        return
-
-    # Modo repeat: repetir a faixa atual
-    if player.queue.mode == wavelink.QueueMode.loop and payload.track:
-        try:
-            await player.play(payload.track)
-            print(f"[FILA] 🔁 Repetindo: {payload.track.title}", flush=True)
-        except Exception as e:
-            print(f"[FILA] ❌ Erro ao repetir: {e}", flush=True)
-        return
-
-    # Próxima faixa na fila
-    if not player.queue.is_empty:
-        track = player.queue.get()
-        try:
-            await player.play(track)
-            print(f"[FILA] ▶️ Próxima: {track.title}", flush=True)
-        except Exception as e:
-            print(f"[FILA] ❌ Erro ao tocar próxima: {e}", flush=True)
-    else:
-        print("[FILA] Fila vazia, parando.", flush=True)
 
 
 @bot.event
