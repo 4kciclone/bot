@@ -62,11 +62,13 @@ def get_guild_data(guild_id):
 async def search_ytdlp(query: str) -> dict | None:
     """Busca uma faixa via yt-dlp. Retorna dict com title, url, duration, webpage_url."""
     try:
+        cookies = "/root/gatocomics-bot/cookies.txt"
+        base_cmd = ["yt-dlp", "--no-warnings", "-q", "-j", "--no-playlist",
+                    "--cookies", cookies]
         if query.startswith("http"):
-            cmd = ["yt-dlp", "--no-warnings", "-q", "-j", "--no-playlist", query]
+            cmd = base_cmd + [query]
         else:
-            cmd = ["yt-dlp", "--no-warnings", "-q", "-j", "--no-playlist",
-                   f"ytsearch:{query}"]
+            cmd = base_cmd + [f"ytsearch:{query}"]
 
         proc = await asyncio.create_subprocess_exec(
             *cmd,
