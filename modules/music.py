@@ -37,13 +37,40 @@ async def get_player(interaction: discord.Interaction) -> wavelink.Player | None
         await interaction.followup.send("❌ Entre em um canal de voz primeiro!", ephemeral=True)
         return None
 
+    # Verificar se Lavalink está conectado
+    try:
+        nodes = wavelink.Pool.nodes
+        if not nodes:
+            await interaction.followup.send("❌ Lavalink não está conectado. Aguarde uns segundos e tente novamente.", ephemeral=True)
+            return None
+    except Exception:
+        await interaction.followup.send("❌ Lavalink não está disponível.", ephemeral=True)
+        return None
+
     vc: wavelink.Player = interaction.guild.voice_client  # type: ignore
 
-    if vc is None:
-        vc = await interaction.user.voice.channel.connect(cls=wavelink.Player)
+    # Se já tem conexão, verificar se está funcional
+    if vc is not None:
+        if vc.connected:
+            return vc
+        # Conexão fantasma — desconectar antes de reconectar
+        try:
+            await vc.disconnect(force=True)
+        except Exception:
+            pass
+        vc = None
+
+    # Conectar ao canal de voz
+    try:
+        vc = await interaction.user.voice.channel.connect(cls=wavelink.Player, timeout=60.0, self_deaf=True)
         vc.autoplay = wavelink.AutoPlayMode.disabled
+    except Exception as e:
+        print(f"[PLAY] ❌ Erro ao conectar ao canal de voz: {e}", flush=True)
+        await interaction.followup.send(f"❌ Não consegui entrar no canal de voz: {e}", ephemeral=True)
+        return None
 
     return vc
+
 
 
 async def search_track(query: str) -> wavelink.Playable | None:
