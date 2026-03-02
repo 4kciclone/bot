@@ -48,31 +48,59 @@ async def get_player(interaction: discord.Interaction) -> wavelink.Player | None
 
 async def search_track(query: str) -> wavelink.Playable | None:
     """
-    Busca uma faixa no YouTube (via LavaSrc/youtube-source plugin).
-    Cai para SoundCloud se não encontrar resultado no YouTube.
+    Busca uma faixa. Ordem: YouTube Music → YouTube → SoundCloud.
+    Loga cada falha para diagnóstico no journal do VPS.
     """
-    # Tenta YouTube
+    # Verificar nó conectado
     try:
-        if query.startswith("http"):
+        node = wavelink.Pool.get_node()
+        if not node:
+            print("[MÚSICA] ❌ Nenhum nó Lavalink disponível!")
+            return None
+    except Exception as e:
+        print(f"[MÚSICA] ❌ Erro ao obter nó Lavalink: {e}")
+        return None
+
+    # 1) URL direta — usar sem prefixo
+    if query.startswith("http"):
+        try:
             tracks = await wavelink.Playable.search(query)
-        else:
-            tracks = await wavelink.Playable.search(f"ytsearch:{query}")
+            if tracks:
+                return tracks[0] if isinstance(tracks, list) else tracks
+        except Exception as e:
+            print(f"[MÚSICA] ❌ Erro URL direta: {e}")
+        return None
 
-        if tracks:
-            return tracks[0] if isinstance(tracks, list) else tracks
-    except Exception:
-        pass
-
-    # Fallback: SoundCloud
+    # 2) YouTube Music (ytmsearch) — mais disponível em servidores públicos
     try:
-        sc_query = query if query.startswith("http") else f"scsearch:{query}"
-        tracks = await wavelink.Playable.search(sc_query)
+        tracks = await wavelink.Playable.search(f"ytmsearch:{query}")
         if tracks:
+            print(f"[MÚSICA] ✅ Encontrado via YouTube Music: {query}")
             return tracks[0] if isinstance(tracks, list) else tracks
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[MÚSICA] ⚠️ Erro YouTube Music: {e}")
 
+    # 3) YouTube normal (ytsearch)
+    try:
+        tracks = await wavelink.Playable.search(f"ytsearch:{query}")
+        if tracks:
+            print(f"[MÚSICA] ✅ Encontrado via YouTube: {query}")
+            return tracks[0] if isinstance(tracks, list) else tracks
+    except Exception as e:
+        print(f"[MÚSICA] ⚠️ Erro YouTube: {e}")
+
+    # 4) SoundCloud (scsearch)
+    try:
+        tracks = await wavelink.Playable.search(f"scsearch:{query}")
+        if tracks:
+            print(f"[MÚSICA] ✅ Encontrado via SoundCloud: {query}")
+            return tracks[0] if isinstance(tracks, list) else tracks
+    except Exception as e:
+        print(f"[MÚSICA] ⚠️ Erro SoundCloud: {e}")
+
+    print(f"[MÚSICA] ❌ Nenhuma fonte encontrou: {query}")
     return None
+
 
 
 async def search_playlist(url: str) -> list[wavelink.Playable]:
