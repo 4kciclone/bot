@@ -20,9 +20,7 @@ tree    = bot.tree
 @bot.event
 async def setup_hook():
     """Conecta ao servidor Lavalink antes do bot ficar online."""
-    # Usa SSL se a porta for 443 (servidores públicos) ou se o host não for local
-    use_ssl = LAVALINK_PORT == 443 or LAVALINK_HOST not in ("localhost", "127.0.0.1")
-    scheme = "https" if use_ssl else "http"
+    scheme = "https" if LAVALINK_PORT == 443 else "http"
     node = wavelink.Node(
         uri=f"{scheme}://{LAVALINK_HOST}:{LAVALINK_PORT}",
         password=LAVALINK_PASSWORD,
