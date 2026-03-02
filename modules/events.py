@@ -8,6 +8,62 @@ from config import *
 
 giveaways      = {}
 scheduled_msgs = []
+_bot_instance  = None
+
+
+@tasks.loop(minutes=10)
+async def update_stats():
+    if not _bot_instance: return
+    for guild in _bot_instance.guilds:
+        online = sum(1 for m in guild.members if m.status != discord.Status.offline and not m.bot)
+        for vc in guild.voice_channels:
+            try:
+                if vc.name.startswith("👥 Membros:"):
+                    await vc.edit(name=f"👥 Membros: {guild.member_count}")
+                elif vc.name.startswith("🟢 Online:"):
+                    await vc.edit(name=f"🟢 Online: {online}")
+            except: pass
+
+
+@tasks.loop(minutes=1)
+async def check_scheduled():
+    if not _bot_instance: return
+    now     = datetime.datetime.utcnow()
+    to_send = [m for m in scheduled_msgs if m["send_at"] <= now]
+    for m in to_send:
+        scheduled_msgs.remove(m)
+        for guild in _bot_instance.guilds:
+            ch = guild.get_channel(m["channel_id"])
+            if ch:
+                await ch.send(m["message"])
+
+
+@tasks.loop(hours=168)
+async def weekly_ranking():
+    if not _bot_instance: return
+    for guild in _bot_instance.guilds:
+        ch = discord.utils.get(guild.channels, name=RANKING_CHANNEL)
+        if not ch: continue
+        from config import xp_data
+        users = sorted(xp_data.get(str(guild.id),{}).items(),
+                       key=lambda x: x[1].get("messages",0), reverse=True)[:10]
+        if not users: continue
+        medals = ["🥇","🥈","🥉"]+["🏅"]*7
+        lines  = [f"{medals[i]} **{(guild.get_member(int(uid)) or type('_',(),{'display_name':f'ID {uid}'})).display_name}** — {d.get('messages',0)} msgs"
+                  for i,(uid,d) in enumerate(users)]
+        await ch.send(embed=discord.Embed(
+            title="🏆 Ranking Semanal — Gato Comics",
+            description="\n".join(lines), color=0xFF6B9D, timestamp=datetime.datetime.utcnow()
+        ))
+
+
+def start_tasks(bot):
+    """Chame esta função no on_ready do bot."""
+    global _bot_instance
+    _bot_instance = bot
+    if not update_stats.is_running():    update_stats.start()
+    if not check_scheduled.is_running(): check_scheduled.start()
+    if not weekly_ranking.is_running():  weekly_ranking.start()
 
 
 def setup_commands(tree: app_commands.CommandTree, bot):
@@ -122,49 +178,5 @@ def setup_commands(tree: app_commands.CommandTree, bot):
         await interaction.response.send_message(f"✅ Mensagem agendada para {canal.mention} em **{minutos} minutos**!", ephemeral=True)
 
 
-    # ── ESTATÍSTICAS ──────────────────────────────────────────
-
-    @tasks.loop(minutes=10)
-    async def update_stats():
-        for guild in bot.guilds:
-            online = sum(1 for m in guild.members if m.status != discord.Status.offline and not m.bot)
-            for vc in guild.voice_channels:
-                try:
-                    if vc.name.startswith("👥 Membros:"):
-                        await vc.edit(name=f"👥 Membros: {guild.member_count}")
-                    elif vc.name.startswith("🟢 Online:"):
-                        await vc.edit(name=f"🟢 Online: {online}")
-                except: pass
-
-    @tasks.loop(minutes=1)
-    async def check_scheduled():
-        now = datetime.datetime.utcnow()
-        to_send = [m for m in scheduled_msgs if m["send_at"] <= now]
-        for m in to_send:
-            scheduled_msgs.remove(m)
-            for guild in bot.guilds:
-                ch = guild.get_channel(m["channel_id"])
-                if ch:
-                    await ch.send(m["message"])
-
-    @tasks.loop(hours=168)
-    async def weekly_ranking():
-        for guild in bot.guilds:
-            ch = discord.utils.get(guild.channels, name=RANKING_CHANNEL)
-            if not ch: continue
-            from config import xp_data
-            users = sorted(xp_data.get(str(guild.id),{}).items(),
-                           key=lambda x: x[1].get("messages",0), reverse=True)[:10]
-            if not users: continue
-            medals = ["🥇","🥈","🥉"]+["🏅"]*7
-            lines  = [f"{medals[i]} **{(guild.get_member(int(uid)) or type('_',(),{'display_name':f'ID {uid}'})).display_name}** — {d.get('messages',0)} msgs"
-                      for i,(uid,d) in enumerate(users)]
-            await ch.send(embed=discord.Embed(
-                title="🏆 Ranking Semanal — Gato Comics",
-                description="\n".join(lines), color=0xFF6B9D, timestamp=datetime.datetime.utcnow()
-            ))
-
-    # Tasks são iniciadas pelo on_ready no bot.py
-    bot._update_stats    = update_stats
-    bot._check_scheduled = check_scheduled
-    bot._weekly_ranking  = weekly_ranking
+    # Tasks registradas no bot para iniciar no on_ready
+    bot._bot_ref = bot

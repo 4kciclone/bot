@@ -23,7 +23,7 @@ from modules.xp         import setup_commands       as setup_xp
 from modules.moderation import setup_commands       as setup_moderation, on_message_ai
 from modules.games      import setup_commands       as setup_games
 from modules.ai         import setup_commands       as setup_ai
-from modules.events     import setup_commands       as setup_events
+from modules.events     import setup_commands       as setup_events, start_tasks
 from modules.profile    import setup_commands       as setup_profile
 
 setup_setup(tree, bot)
@@ -43,7 +43,6 @@ setup_profile(tree, bot)
 
 @bot.event
 async def on_ready():
-    # Views persistentes (sobrevivem ao restart)
     bot.add_view(TicketCategoryView())
     bot.add_view(TicketCloseView())
 
@@ -52,13 +51,8 @@ async def on_ready():
         activity=discord.Activity(type=discord.ActivityType.watching, name="🐱 Gato Comics")
     )
 
-    # Iniciar tasks agendadas
-    if hasattr(bot, '_update_stats') and not bot._update_stats.is_running():
-        bot._update_stats.start()
-    if hasattr(bot, '_check_scheduled') and not bot._check_scheduled.is_running():
-        bot._check_scheduled.start()
-    if hasattr(bot, '_weekly_ranking') and not bot._weekly_ranking.is_running():
-        bot._weekly_ranking.start()
+    # Iniciar tasks agendadas (só depois do event loop estar ativo)
+    start_tasks(bot)
 
     print(f"✅ {bot.user} online! | {len(bot.guilds)} servidor(es)")
     print(f"📋 Comandos sincronizados!")
