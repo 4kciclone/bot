@@ -20,20 +20,16 @@ tree    = bot.tree
 # ─────────────────────────────────────────
 from modules.setup      import setup_commands       as setup_setup
 from modules.tickets    import setup_commands       as setup_tickets, TicketCategoryView, TicketCloseView
-from modules.music      import setup_commands       as setup_music
 from modules.xp         import setup_commands       as setup_xp, process_message as xp_process_message
 from modules.moderation import setup_commands       as setup_moderation, on_message_ai
-from modules.games      import setup_commands       as setup_games
 from modules.ai         import setup_commands       as setup_ai
 from modules.events     import setup_commands       as setup_events, start_tasks
 from modules.profile    import setup_commands       as setup_profile
 
 setup_setup(tree, bot)
 setup_tickets(tree, bot)
-setup_music(tree, bot)
 setup_xp(tree, bot)
 setup_moderation(tree, bot)
-setup_games(tree, bot)
 setup_ai(tree, bot)
 setup_events(tree, bot)
 setup_profile(tree, bot)
@@ -119,19 +115,6 @@ async def on_message(message):
     await on_message_ai(message)
 
     await bot.process_commands(message)
-
-
-
-
-
-@bot.event
-async def on_reaction_add(reaction, user):
-    if user.bot: return
-    # Verificar votos de arte
-    from modules.games import art_votes
-    from config import get_xp, set_xp
-    if reaction.message.id in art_votes and str(reaction.emoji) == "❤️":
-        art_votes[reaction.message.id]["votes"] = art_votes[reaction.message.id].get("votes", 0) + 1
 
 
 @bot.event

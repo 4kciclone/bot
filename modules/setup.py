@@ -247,3 +247,50 @@ def setup_commands(tree: app_commands.CommandTree, bot):
             color=discord.Color.green()
         )
         await interaction.followup.send(embed=embed_done, ephemeral=True)
+
+    @tree.command(name="ajuda", description="❓ Veja todos os comandos e funcionalidades da Gato Comics")
+    async def ajuda(interaction: discord.Interaction):
+        embed = discord.Embed(
+            title="🐱 Guia da Gato Comics",
+            description="Aqui estão as funcionalidades principais do nosso bot e recomendações para o servidor!",
+            color=0xFF6B9D
+        )
+
+        embed.add_field(
+            name="🤖 Inteligência Artificial",
+            value="O bot monitora o chat e responde automaticamente com nossa IA. Basta conversar!",
+            inline=False
+        )
+
+        embed.add_field(
+            name="📊 XP & Níveis",
+            value="`/perfil` - Veja seu nível, XP e conquistas.\n`/ranking` - Veja os membros mais ativos.",
+            inline=True
+        )
+
+        embed.add_field(
+            name="🎫 Suporte & Tickets",
+            value="Vá em <#123456789012345678> (abrir-ticket) para falar com a staff.",
+            inline=True
+        )
+
+        embed.add_field(
+            name="🔨 Moderação",
+            value="Nossa IA modera o chat automaticamente. Evite spam e conteúdo impróprio.",
+            inline=False
+        )
+
+        embed.add_field(
+            name="🎵 Música (Recomendações)",
+            value="Para ouvir música, use o **Jockie Music** no canal <#123456789012345678>.\nUse `/play` seguido do nome da música!",
+            inline=False
+        )
+
+        embed.add_field(
+            name="🎮 Jogos (Recomendações)",
+            value="**Mudae**: Colecione personagens de anime.\n**Gartic**: Desenhe e adivinhe.\n**Dank Memer**: Economia e memes.",
+            inline=False
+        )
+
+        embed.set_footer(text="Gato Comics • A sua editora de webtoons 🐱")
+        await interaction.response.send_message(embed=embed)

@@ -7,12 +7,7 @@ TOKEN            = os.getenv("TOKEN")
 GUILD_ID         = int(os.getenv("GUILD_ID", 0))
 NVIDIA_API_KEY   = os.getenv("NVIDIA_API_KEY")
 
-# Lavalink
-LAVALINK_HOST     = os.getenv("LAVALINK_HOST",     "localhost")
-LAVALINK_PORT     = int(os.getenv("LAVALINK_PORT", 2333))
-LAVALINK_PASSWORD = os.getenv("LAVALINK_PASSWORD", "youshallnotpass")
-
-MUSIC_CHANNEL    = os.getenv("MUSIC_CHANNEL",    "🎵・comandos-musica")
+# Canais
 TICKET_CHANNEL   = os.getenv("TICKET_CHANNEL",   "🎫・abrir-ticket")
 ANNOUNCE_CHANNEL = os.getenv("ANNOUNCE_CHANNEL", "📣・anúncios")
 LAUNCH_CHANNEL   = os.getenv("LAUNCH_CHANNEL",   "🚀・lançamentos")
@@ -23,7 +18,6 @@ LOG_CHANNEL      = os.getenv("LOG_CHANNEL",      "📋・log-tickets")
 LOG_MOD_CHANNEL  = os.getenv("LOG_MOD_CHANNEL",  "🔨・log-moderação")
 POLL_CHANNEL     = os.getenv("POLL_CHANNEL",     "📊・enquetes")
 GIVEAWAY_CHANNEL = os.getenv("GIVEAWAY_CHANNEL", "🎁・sorteios")
-GAMES_CHANNEL    = os.getenv("GAMES_CHANNEL",    "🎮・jogos")
 STATS_CATEGORY   = os.getenv("STATS_CATEGORY",   "📊 ESTATÍSTICAS")
 
 WARNS_MUTE       = int(os.getenv("WARNS_MUTE", 3))
@@ -40,7 +34,6 @@ LEVEL_ROLES        = {5: "📖 Leitor", 15: "💎 Leitor VIP", 30: "⭐ Veterano
 xp_data       = {}
 warns_data    = {}
 giveaways     = {}
-playlists     = {}
 streaks       = {}
 missions_done = {}
 shop_items    = {
