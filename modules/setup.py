@@ -275,6 +275,32 @@ def setup_commands(tree: app_commands.CommandTree, bot):
             from modules.tickets import send_ticket_panel
             await send_ticket_panel(ticket_ch)
 
+        # Atribuição automática de cargos para os bots auxiliares
+        bot_assignments = [
+            (411916947773587459, cr.get("🎧 DJ")),                # Jockie Music
+            (432610292342587392, cr.get("💍 Waifu Collector")),   # Mudae
+            (487328045275938828, cr.get("🖌️ Mestre do Gartic")),  # Gartic
+            (270904126974590976, cr.get("🐸 Dank Member")),       # Dank Memer
+        ]
+
+        for bot_id, role in bot_assignments:
+            if role:
+                member = guild.get_member(bot_id)
+                if member:
+                    try:
+                        await member.add_roles(role)
+                        logs.append(f"Cargo atribuído ao bot: {member.name}")
+                    except Exception as e:
+                        logs.append(f"Erro ao dar cargo a {bot_id}: {str(e)[:30]}")
+
+        # Caso existam múltiplos Jockie Music (instâncias), procurar por nome
+        for m in guild.members:
+            if m.bot and "Jockie Music" in m.name and m.id != 411916947773587459:
+                dj_role = cr.get("🎧 DJ")
+                if dj_role:
+                    try: await m.add_roles(dj_role)
+                    except: pass
+
         embed_done = discord.Embed(
             title="✅ Orquestração Gato Comics concluída!",
             description="Todos os cargos e canais foram configurados. Agora convide os bots auxiliares clicando em `/ajuda`!",
