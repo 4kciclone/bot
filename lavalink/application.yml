@@ -6,8 +6,8 @@ server:
 
 lavalink:
   plugins:
-    # Plugin oficial do YouTube (substitui o extrator padrão e contorna bloqueios)
-    - dependency: "dev.lavalink.youtube:youtube-plugin:1.18.0"
+    # Plugin oficial do YouTube (substitui o extrator padrão)
+    - dependency: "dev.lavalink.youtube:youtube-plugin:1.11.2"
       repository: "https://maven.lavalink.dev/releases"
 
   server:
@@ -50,12 +50,14 @@ plugins:
     allowSearch: true
     allowDirectVideoIds: true
     allowDirectPlaylistIds: true
+    # Múltiplos clientes aumentam a chance de sucesso
     clients:
-      - WEB
       - MUSIC
-      - IOS
+      - WEB
+      - ANDROID_MUSIC
+      - TVHTML5EMBEDDED
     oauth:
-      enabled: true
+      enabled: false
 
 metrics:
   prometheus:

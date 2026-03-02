@@ -47,50 +47,31 @@ async def get_player(interaction: discord.Interaction) -> wavelink.Player | None
 
 
 async def search_track(query: str) -> wavelink.Playable | None:
-    """
-    Busca uma faixa. Ordem: YouTube Music → YouTube.
-    Loga cada falha para diagnóstico no journal do VPS.
-    """
-    # Verificar nó conectado
-    try:
-        node = wavelink.Pool.get_node()
-        if not node:
-            print("[MÚSICA] ❌ Nenhum nó Lavalink disponível!")
-            return None
-    except Exception as e:
-        print(f"[MÚSICA] ❌ Erro ao obter nó Lavalink: {e}")
-        return None
-
-    # 1) URL direta
+    """Busca uma faixa no YouTube via Lavalink local."""
+    # URL direta
     if query.startswith("http"):
         try:
-            tracks = await wavelink.Playable.search(query)
-            if tracks:
-                return tracks[0] if isinstance(tracks, list) else tracks
+            result = await wavelink.Playable.search(query)
+            if result:
+                return result[0] if isinstance(result, list) else result
         except Exception as e:
-            print(f"[MÚSICA] ❌ Erro URL direta: {e}")
+            print(f"[MÚSICA] Erro URL: {e}", flush=True)
         return None
 
-    # 2) YouTube Music (ytmsearch)
-    try:
-        tracks = await wavelink.Playable.search(f"ytmsearch:{query}")
-        if tracks:
-            print(f"[MÚSICA] ✅ YouTube Music: {query}")
-            return tracks[0] if isinstance(tracks, list) else tracks
-    except Exception as e:
-        print(f"[MÚSICA] ⚠️ Erro YouTube Music: {e}")
+    # YouTube (ytsearch) → YouTube Music (ytmsearch) como fallback
+    for prefix in ("ytsearch", "ytmsearch"):
+        try:
+            result = await wavelink.Playable.search(f"{prefix}:{query}")
+            if result:
+                track = result[0] if isinstance(result, list) else result
+                print(f"[MÚSICA] ✅ {prefix}: {track.title}", flush=True)
+                return track
+        except Exception as e:
+            print(f"[MÚSICA] ⚠️ {prefix} falhou: {e}", flush=True)
 
-    # 3) YouTube (ytsearch)
-    try:
-        tracks = await wavelink.Playable.search(f"ytsearch:{query}")
-        if tracks:
-            print(f"[MÚSICA] ✅ YouTube: {query}")
-            return tracks[0] if isinstance(tracks, list) else tracks
-    except Exception as e:
-        print(f"[MÚSICA] ⚠️ Erro YouTube: {e}")
-
-    print(f"[MÚSICA] ❌ Não encontrado: {query}")
+    print(f"[MÚSICA] ❌ Não encontrado: {query}", flush=True)
     return None
+
 
 
 
