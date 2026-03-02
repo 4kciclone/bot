@@ -53,8 +53,6 @@ plugins:
     clients:
       - MUSIC
       - ANDROID_TESTSUITE
-      - TV_SIMPLY_EMBEDDED_PLAYER
-      - WEB
       - TVHTML5SIMPLY_EMBEDDED_PLAYER
 
 metrics:
