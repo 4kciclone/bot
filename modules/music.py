@@ -104,55 +104,66 @@ def setup_commands(tree: app_commands.CommandTree, bot):
             print(f"Erro no comando /{cmd}: {error}")
 
     # ── /play ────────────────────────────────────────────────────────────────
-    @tree.command(name="play", description="🎵 Toca uma música (YouTube/SoundCloud/link)")
+    @tree.command(name="play", description="🎵 Toca uma música (YouTube/link)")
     @music_only()
     @app_commands.checks.cooldown(1, 5, key=lambda i: i.user.id)
     async def play(interaction: discord.Interaction, musica: str):
         await interaction.response.defer()
 
-        vc = await get_player(interaction)
-        if vc is None:
-            return
-
-        # ── Playlist ─────────────────────────────────────────────────────
-        if "playlist" in musica.lower() or "list=" in musica or "album" in musica.lower():
-            tracks = await search_playlist(musica)
-            if not tracks:
-                await interaction.followup.send("❌ Playlist não encontrada.", ephemeral=True)
+        try:
+            vc = await get_player(interaction)
+            if vc is None:
                 return
-            limited = tracks[:50]
-            for t in limited:
-                await vc.queue.put_wait(t)
-            embed = discord.Embed(
-                description=f"📋 **{len(limited)} músicas** adicionadas da playlist!",
-                color=0xFF6B9D,
-            )
-            if not vc.playing:
-                await vc.play(vc.queue.get())
+
+            # ── Playlist ─────────────────────────────────────────────────────
+            if "playlist" in musica.lower() or "list=" in musica or "album" in musica.lower():
+                tracks = await search_playlist(musica)
+                if not tracks:
+                    await interaction.followup.send("❌ Playlist não encontrada.", ephemeral=True)
+                    return
+                limited = tracks[:50]
+                for t in limited:
+                    await vc.queue.put_wait(t)
+                embed = discord.Embed(
+                    description=f"📋 **{len(limited)} músicas** adicionadas da playlist!",
+                    color=0xFF6B9D,
+                )
+                if not vc.playing:
+                    await vc.play(vc.queue.get())
+                await interaction.followup.send(embed=embed)
+                return
+
+            # ── Faixa única ───────────────────────────────────────────────────
+            track = await search_track(musica)
+            if not track:
+                await interaction.followup.send("❌ Não encontrei essa música.", ephemeral=True)
+                return
+
+            source_icon = "🎵 YouTube"
+
+            if vc.playing or not vc.queue.is_empty:
+                await vc.queue.put_wait(track)
+                embed = discord.Embed(
+                    description=f"📋 **{track.title}** adicionada à fila! (#{vc.queue.count}) {source_icon}",
+                    color=0xFF6B9D,
+                )
+            else:
+                await vc.play(track)
+                embed = discord.Embed(
+                    description=f"▶️ Tocando: **{track.title}** {source_icon}",
+                    color=0xFF6B9D,
+                )
             await interaction.followup.send(embed=embed)
-            return
 
-        # ── Faixa única ───────────────────────────────────────────────────
-        track = await search_track(musica)
-        if not track:
-            await interaction.followup.send("❌ Não encontrei essa música.", ephemeral=True)
-            return
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            print(f"[PLAY] ❌ ERRO: {e}", flush=True)
+            try:
+                await interaction.followup.send(f"❌ Erro: {e}", ephemeral=True)
+            except:
+                pass
 
-        source_icon = "☁️ SoundCloud" if "soundcloud" in (track.uri or "") else "🎵 YouTube"
-
-        if vc.playing or not vc.queue.is_empty:
-            await vc.queue.put_wait(track)
-            embed = discord.Embed(
-                description=f"📋 **{track.title}** adicionada à fila! (#{vc.queue.count}) {source_icon}",
-                color=0xFF6B9D,
-            )
-        else:
-            await vc.play(track)
-            embed = discord.Embed(
-                description=f"▶️ Tocando: **{track.title}** {source_icon}",
-                color=0xFF6B9D,
-            )
-        await interaction.followup.send(embed=embed)
 
     # ── /playaleatorio ───────────────────────────────────────────────────────
     @tree.command(name="playaleatorio", description="🎲 Toca uma música aleatória de anime/webtoon")
