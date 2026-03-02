@@ -51,6 +51,7 @@ plugins:
     allowDirectVideoIds: true
     allowDirectPlaylistIds: true
     clients:
+      - WEB
       - MUSIC
       - IOS
     oauth:
