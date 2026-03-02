@@ -11,16 +11,25 @@ music_current = {}  # {guild_id: title}
 music_repeat  = {}  # {guild_id: bool}
 music_current_url = {}  # {guild_id: url}
 
-YDL_OPTS = {
+YDL_OPTS_YOUTUBE = {
     'format': 'bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio/best',
     'quiet': True,
     'no_warnings': True,
     'default_search': 'ytsearch1',
     'noplaylist': True,
-    'skip_download': True,
     'socket_timeout': 10,
     'extractor_args': {'youtube': {'player_client': ['web']}},
 }
+
+YDL_OPTS_SOUNDCLOUD = {
+    'format': 'bestaudio/best',
+    'quiet': True,
+    'no_warnings': True,
+    'default_search': 'scsearch1',
+    'noplaylist': True,
+    'socket_timeout': 10,
+}
+
 FFMPEG_OPTS = {
     'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
     'options': '-vn'
@@ -34,15 +43,33 @@ RANDOM_QUERIES = [
 
 
 async def get_audio(query: str):
+    """Tenta YouTube primeiro, cai para SoundCloud se bloqueado."""
     loop = asyncio.get_event_loop()
-    with yt_dlp.YoutubeDL(YDL_OPTS) as ydl:
-        info = await loop.run_in_executor(None, lambda: ydl.extract_info(query, download=False))
+
+    # Tentativa 1 — YouTube
+    try:
+        with yt_dlp.YoutubeDL(YDL_OPTS_YOUTUBE) as ydl:
+            info = await loop.run_in_executor(None, lambda: ydl.extract_info(query, download=False))
+            if info:
+                if 'entries' in info:
+                    entries = [e for e in info['entries'] if e]
+                    info = entries[0] if entries else None
+                if info and info.get('url'):
+                    return info['url'], info.get('title', 'Desconhecido'), '🎵 YouTube'
+    except Exception as e:
+        if 'Sign in' not in str(e) and 'bot' not in str(e).lower():
+            raise
+
+    # Tentativa 2 — SoundCloud
+    sc_query = query if query.startswith("http") else f"scsearch1:{query.replace('ytsearch1:','')}"
+    with yt_dlp.YoutubeDL(YDL_OPTS_SOUNDCLOUD) as ydl:
+        info = await loop.run_in_executor(None, lambda: ydl.extract_info(sc_query, download=False))
         if 'entries' in info:
             entries = [e for e in info['entries'] if e]
             info = entries[0] if entries else None
         if not info:
             raise ValueError("Nenhum resultado encontrado.")
-        return info.get('url'), info.get('title', 'Desconhecido')
+        return info.get('url'), info.get('title', 'Desconhecido'), '☁️ SoundCloud'
 
 
 async def get_playlist(url: str):
@@ -114,18 +141,18 @@ def setup_commands(tree: app_commands.CommandTree, bot):
                 if not vc.is_playing():
                     await play_next(interaction.guild, bot)
                 return
-            url, title = await get_audio(musica)
+            url, title, source = await get_audio(musica)
         except Exception as e:
             await interaction.followup.send(f"❌ Não encontrei: `{e}`", ephemeral=True)
             return
 
         if vc.is_playing() or vc.is_paused():
             music_queues[gid].append((url, title))
-            embed = discord.Embed(description=f"📋 **{title}** adicionada à fila! (#{len(music_queues[gid])})", color=0xFF6B9D)
+            embed = discord.Embed(description=f"📋 **{title}** adicionada à fila! (#{len(music_queues[gid])}) {source}", color=0xFF6B9D)
         else:
             music_queues[gid].insert(0, (url, title))
             await play_next(interaction.guild, bot)
-            embed = discord.Embed(description=f"▶️ Tocando: **{title}**", color=0xFF6B9D)
+            embed = discord.Embed(description=f"▶️ Tocando: **{title}** {source}", color=0xFF6B9D)
         await interaction.followup.send(embed=embed)
 
     @tree.command(name="playaleatorio", description="🎲 Toca uma música aleatória de anime/webtoon")
@@ -139,20 +166,19 @@ def setup_commands(tree: app_commands.CommandTree, bot):
         gid = interaction.guild.id
         if gid not in music_queues: music_queues[gid] = []
 
-        query = random.choice(RANDOM_QUERIES)
         try:
-            url, title = await get_audio(query)
+            url, title, source = await get_audio(query)
         except:
             await interaction.followup.send("❌ Erro ao buscar música aleatória.", ephemeral=True)
             return
 
         if vc.is_playing():
             music_queues[gid].append((url, title))
-            embed = discord.Embed(description=f"🎲 Surpresa! **{title}** na fila!", color=0xFF6B9D)
+            embed = discord.Embed(description=f"🎲 Surpresa! **{title}** na fila! {source}", color=0xFF6B9D)
         else:
             music_queues[gid].insert(0, (url, title))
             await play_next(interaction.guild, bot)
-            embed = discord.Embed(description=f"🎲 Tocando aleatório: **{title}**", color=0xFF6B9D)
+            embed = discord.Embed(description=f"🎲 Tocando aleatório: **{title}** {source}", color=0xFF6B9D)
         await interaction.followup.send(embed=embed)
 
     @tree.command(name="skip", description="⏭️ Pula para a próxima música")
