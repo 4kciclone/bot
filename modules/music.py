@@ -94,6 +94,31 @@ def setup_commands(tree: app_commands.CommandTree, bot):
     async def on_ready_lavalink():
         pass  # conexão feita em bot.py via setup_hook
 
+    # ── Avançar fila quando faixa termina ───────────────────────────────────
+    @bot.event
+    async def on_wavelink_track_end(payload: wavelink.TrackEndEventPayload):
+        player: wavelink.Player = payload.player
+        if not player or not player.connected:
+            return
+
+        # Só avança automaticamente ao terminar, falhar ou pular — não ao trocar diretamente
+        if payload.reason not in (
+            wavelink.TrackEndReason.finished,
+            wavelink.TrackEndReason.load_failed,
+            wavelink.TrackEndReason.stopped,  # /skip usa stop() internamente
+        ):
+            return
+
+        # Modo repeat: repetir a faixa atual
+        if player.queue.mode == wavelink.QueueMode.loop and payload.track:
+            await player.play(payload.track)
+            return
+
+        # Próxima faixa na fila
+        if not player.queue.is_empty:
+            track = player.queue.get()
+            await player.play(track)
+
     # ── Erro global ─────────────────────────────────────────────────────────
     @tree.error
     async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):

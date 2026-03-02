@@ -189,10 +189,11 @@ def setup_commands(tree: app_commands.CommandTree, bot):
         while game["lives"] > 0:
             display = " ".join([c if c in game["guessed"] else "\_" for c in game["word"]])
             if "_" not in display:
-                data = get_xp(interaction.guild.id, interaction.user.id)
+                winner_member = msg.author if "msg" in dir() else interaction.user
+                data = get_xp(interaction.guild.id, winner_member.id)
                 data["xp"] = data.get("xp",0)+50; data["total_xp"] = data.get("total_xp",0)+50
-                set_xp(interaction.guild.id, interaction.user.id, data)
-                await interaction.channel.send(f"🎉 Parabéns! A palavra era **{word}**! **+50 XP**")
+                set_xp(interaction.guild.id, winner_member.id, data)
+                await interaction.channel.send(f"🎉 {winner_member.mention} adivinhou! A palavra era **{word}**! **+50 XP**")
                 break
 
             try:
@@ -218,6 +219,7 @@ def setup_commands(tree: app_commands.CommandTree, bot):
                 break
         else:
             await interaction.channel.send(f"💀 Você perdeu! A palavra era **{word}**")
+
 
         active_games.pop(interaction.channel.id, None)
 

@@ -40,118 +40,130 @@ def update_streak(gid, uid):
     return data["streak"], True
 
 
-def setup_commands(tree: app_commands.CommandTree, bot):
+async def process_message(message, bot):
+    """Processa XP, streak, anti-spam e missões. Chamado pelo on_message de bot.py."""
+    if message.author.bot or not message.guild:
+        return
 
-    # ── Evento de mensagem (XP + streak + anti-spam) ──
-    @bot.event
-    async def on_message(message):
-        if message.author.bot or not message.guild: return
+    gid = message.guild.id
+    uid = message.author.id
+    now = datetime.datetime.utcnow().timestamp()
 
-        gid = message.guild.id
-        uid = message.author.id
-        now = datetime.datetime.utcnow().timestamp()
+    # Anti-spam
+    key = f"{gid}:{uid}"
+    if key not in spam_tracker: spam_tracker[key] = []
+    spam_tracker[key] = [t for t in spam_tracker[key] if now - t < SPAM_SECONDS]
+    spam_tracker[key].append(now)
+    if len(spam_tracker[key]) >= SPAM_LIMIT:
+        try:
+            until = discord.utils.utcnow() + datetime.timedelta(minutes=5)
+            await message.author.timeout(until, reason="Auto-mute: spam detectado")
+            await message.channel.send(
+                f"⚠️ {message.author.mention} foi silenciado por **5 minutos** por spam.",
+                delete_after=10
+            )
+            spam_tracker[key] = []
+        except: pass
+        return
 
-        # Anti-spam
-        key = f"{gid}:{uid}"
-        if key not in spam_tracker: spam_tracker[key] = []
-        spam_tracker[key] = [t for t in spam_tracker[key] if now - t < SPAM_SECONDS]
-        spam_tracker[key].append(now)
-        if len(spam_tracker[key]) >= SPAM_LIMIT:
+    # Anti-link (só permite links para Leitor+)
+    leitor_role = discord.utils.get(message.guild.roles, name="📖 Leitor")
+    if leitor_role and leitor_role not in message.author.roles:
+        if "http://" in message.content or "https://" in message.content:
             try:
-                until = discord.utils.utcnow() + datetime.timedelta(minutes=5)
-                await message.author.timeout(until, reason="Auto-mute: spam detectado")
+                await message.delete()
                 await message.channel.send(
-                    f"⚠️ {message.author.mention} foi silenciado por **5 minutos** por spam.",
-                    delete_after=10
+                    f"🔗 {message.author.mention} você precisa ser **Leitor** para enviar links!",
+                    delete_after=5
                 )
-                spam_tracker[key] = []
             except: pass
             return
 
-        # Anti-link (só permite links para Leitor+)
-        leitor_role = discord.utils.get(message.guild.roles, name="📖 Leitor")
-        if leitor_role and leitor_role not in message.author.roles:
-            if "http://" in message.content or "https://" in message.content:
-                try:
-                    await message.delete()
-                    await message.channel.send(
-                        f"🔗 {message.author.mention} você precisa ser **Leitor** para enviar links!",
-                        delete_after=5
-                    )
-                except: pass
-                return
+    # XP
+    data = get_xp(gid, uid)
+    data["xp"]       = data.get("xp", 0) + XP_PER_MESSAGE
+    data["messages"] = data.get("messages", 0) + 1
+    data["total_xp"] = data.get("total_xp", 0) + XP_PER_MESSAGE
+    data["level"]    = data.get("level", 1)
 
-        # XP
-        data = get_xp(gid, uid)
-        data["xp"]       = data.get("xp", 0) + XP_PER_MESSAGE
-        data["messages"] = data.get("messages", 0) + 1
-        data["total_xp"] = data.get("total_xp", 0) + XP_PER_MESSAGE
-        data["level"]    = data.get("level", 1)
+    # Streak
+    streak, is_new_day = update_streak(gid, uid)
+    if is_new_day and streak > 1:
+        bonus = streak * 10
+        data["xp"]       += bonus
+        data["total_xp"] += bonus
 
-        # Streak
-        streak, is_new_day = update_streak(gid, uid)
-        if is_new_day and streak > 1:
-            bonus = streak * 10
-            data["xp"]       += bonus
-            data["total_xp"] += bonus
+    # Level up
+    if data["xp"] >= xp_needed(data["level"]):
+        data["level"] += 1
+        data["xp"]     = 0
+        set_xp(gid, uid, data)
+        await handle_level_up(message.guild, message.author, data["level"], streak)
+    else:
+        set_xp(gid, uid, data)
 
-        # Level up
-        if data["xp"] >= xp_needed(data["level"]):
-            data["level"] += 1
-            data["xp"]     = 0
+    # Missões — contar mensagens do dia (não total)
+    today = datetime.date.today().isoformat()
+    g_str, u_str = str(gid), str(uid)
+    if g_str not in missions_data: missions_data[g_str] = {}
+    if u_str not in missions_data[g_str]: missions_data[g_str][u_str] = {"date": today, "done": [], "daily_msgs": 0}
+    if missions_data[g_str][u_str].get("date") != today:
+        missions_data[g_str][u_str] = {"date": today, "done": [], "daily_msgs": 0}
+    missions_data[g_str][u_str]["daily_msgs"] = missions_data[g_str][u_str].get("daily_msgs", 0) + 1
+
+    await check_missions(message.guild, message.author, "messages")
+
+
+
+
+
+async def handle_level_up(guild, member, level, streak):
+    ch = discord.utils.get(guild.channels, name=CONQUEST_CHANNEL)
+    if ch:
+        streak_txt = f" | 🔥 Streak: {streak} dias!" if streak > 1 else ""
+        embed = discord.Embed(
+            title="🎉 Subiu de Nível!",
+            description=f"{member.mention} chegou ao **nível {level}**! 🚀{streak_txt}",
+            color=0xFF6B9D
+        )
+        await ch.send(embed=embed)
+    if level in LEVEL_ROLES:
+        role = discord.utils.get(guild.roles, name=LEVEL_ROLES[level])
+        if role and role not in member.roles:
+            await member.add_roles(role)
+
+
+async def check_missions(guild, member, action_type):
+    gid   = str(guild.id)
+    uid   = str(member.id)
+    today = datetime.date.today().isoformat()
+    if gid not in missions_data: missions_data[gid] = {}
+    if uid not in missions_data[gid]: missions_data[gid][uid] = {"date": today, "done": [], "daily_msgs": 0}
+    if missions_data[gid][uid].get("date") != today:
+        missions_data[gid][uid] = {"date": today, "done": [], "daily_msgs": 0}
+
+    user_day = missions_data[gid][uid]
+    data = get_xp(gid, uid)
+    for m in DAILY_MISSIONS:
+        if m["id"] in user_day["done"]: continue
+        if m["type"] != action_type: continue
+        # Usar mensagens do dia, não total
+        val = user_day.get("daily_msgs", 0) if action_type == "messages" else 0
+        if val >= m["req"]:
+            user_day["done"].append(m["id"])
+            data["xp"]       = data.get("xp", 0) + m["xp"]
+            data["total_xp"] = data.get("total_xp", 0) + m["xp"]
             set_xp(gid, uid, data)
-            await handle_level_up(message.guild, message.author, data["level"], streak)
-        else:
-            set_xp(gid, uid, data)
-
-        # Missões
-        await check_missions(message.guild, message.author, "messages")
-
-        await bot.process_commands(message)
+            ch = discord.utils.get(guild.channels, name=CONQUEST_CHANNEL)
+            if ch:
+                await ch.send(embed=discord.Embed(
+                    description=f"✅ {member.mention} completou a missão **{m['desc']}** e ganhou **+{m['xp']} XP**!",
+                    color=0xFF6B9D
+                ))
 
 
-    async def handle_level_up(guild, member, level, streak):
-        ch = discord.utils.get(guild.channels, name=CONQUEST_CHANNEL)
-        if ch:
-            streak_txt = f" | 🔥 Streak: {streak} dias!" if streak > 1 else ""
-            embed = discord.Embed(
-                title="🎉 Subiu de Nível!",
-                description=f"{member.mention} chegou ao **nível {level}**! 🚀{streak_txt}",
-                color=0xFF6B9D
-            )
-            await ch.send(embed=embed)
-        if level in LEVEL_ROLES:
-            role = discord.utils.get(guild.roles, name=LEVEL_ROLES[level])
-            if role and role not in member.roles:
-                await member.add_roles(role)
 
-
-    async def check_missions(guild, member, action_type):
-        gid   = str(guild.id)
-        uid   = str(member.id)
-        today = datetime.date.today().isoformat()
-        if gid not in missions_data: missions_data[gid] = {}
-        if uid not in missions_data[gid]: missions_data[gid][uid] = {"date": today, "done": []}
-        if missions_data[gid][uid]["date"] != today:
-            missions_data[gid][uid] = {"date": today, "done": []}
-
-        data = get_xp(gid, uid)
-        for m in DAILY_MISSIONS:
-            if m["id"] in missions_data[gid][uid]["done"]: continue
-            if m["type"] != action_type: continue
-            val = data.get("messages", 0) if action_type == "messages" else 0
-            if val >= m["req"]:
-                missions_data[gid][uid]["done"].append(m["id"])
-                data["xp"]       = data.get("xp", 0) + m["xp"]
-                data["total_xp"] = data.get("total_xp", 0) + m["xp"]
-                set_xp(gid, uid, data)
-                ch = discord.utils.get(guild.channels, name=CONQUEST_CHANNEL)
-                if ch:
-                    await ch.send(embed=discord.Embed(
-                        description=f"✅ {member.mention} completou a missão **{m['desc']}** e ganhou **+{m['xp']} XP**!",
-                        color=0xFF6B9D
-                    ))
-
+def setup_commands(tree: app_commands.CommandTree, bot):
 
     @tree.command(name="rank", description="📊 Seu nível e XP")
     @app_commands.checks.cooldown(1, 60, key=lambda i: i.user.id)

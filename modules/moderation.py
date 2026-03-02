@@ -98,17 +98,28 @@ def setup_commands(tree: app_commands.CommandTree, bot):
     @tree.command(name="kick", description="👢 Expulsa um membro")
     @app_commands.checks.has_permissions(kick_members=True)
     async def kick(interaction: discord.Interaction, membro: discord.Member, motivo: str = "Sem motivo"):
-        await membro.kick(reason=motivo)
-        await interaction.response.send_message(f"👢 **{membro}** expulso.", ephemeral=True)
-        await log_mod_action(interaction.guild, "Kick", membro, interaction.user, motivo, discord.Color.orange())
+        try:
+            await membro.kick(reason=motivo)
+            await interaction.response.send_message(f"👢 **{membro}** expulso.", ephemeral=True)
+            await log_mod_action(interaction.guild, "Kick", membro, interaction.user, motivo, discord.Color.orange())
+        except discord.Forbidden:
+            await interaction.response.send_message("❌ Sem permissão para expulsar este membro.", ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Erro: {e}", ephemeral=True)
 
 
     @tree.command(name="ban", description="🔨 Bane um membro")
     @app_commands.checks.has_permissions(ban_members=True)
     async def ban(interaction: discord.Interaction, membro: discord.Member, motivo: str = "Sem motivo"):
-        await membro.ban(reason=motivo)
-        await interaction.response.send_message(f"🔨 **{membro}** banido.", ephemeral=True)
-        await log_mod_action(interaction.guild, "Ban", membro, interaction.user, motivo, discord.Color.red())
+        try:
+            await membro.ban(reason=motivo)
+            await interaction.response.send_message(f"🔨 **{membro}** banido.", ephemeral=True)
+            await log_mod_action(interaction.guild, "Ban", membro, interaction.user, motivo, discord.Color.red())
+        except discord.Forbidden:
+            await interaction.response.send_message("❌ Sem permissão para banir este membro.", ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Erro: {e}", ephemeral=True)
+
 
 
     @tree.command(name="mute", description="🔇 Silencia um membro")

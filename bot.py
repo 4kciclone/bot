@@ -35,7 +35,7 @@ async def setup_hook():
 from modules.setup      import setup_commands       as setup_setup
 from modules.tickets    import setup_commands       as setup_tickets, TicketCategoryView, TicketCloseView
 from modules.music      import setup_commands       as setup_music
-from modules.xp         import setup_commands       as setup_xp
+from modules.xp         import setup_commands       as setup_xp, process_message as xp_process_message
 from modules.moderation import setup_commands       as setup_moderation, on_message_ai
 from modules.games      import setup_commands       as setup_games
 from modules.ai         import setup_commands       as setup_ai
@@ -126,8 +126,10 @@ async def on_message(message):
     if message.author.bot or not message.guild:
         return
 
-    # Passar para módulo de XP (já registrado via setup_xp)
-    # Passar para moderação IA
+    # XP, anti-spam, streak e missões
+    await xp_process_message(message, bot)
+
+    # Moderação IA
     await on_message_ai(message)
 
     await bot.process_commands(message)

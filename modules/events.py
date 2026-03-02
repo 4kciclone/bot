@@ -110,16 +110,20 @@ def setup_commands(tree: app_commands.CommandTree, bot):
         msg = await interaction.original_response()
         giveaways[msg.id] = {"channel_id": interaction.channel.id, "prize": premio,
                               "role_req": cargo.id if cargo else None, "participants": []}
-        await asyncio.sleep(minutos * 60)
-        g = giveaways.pop(msg.id, None)
-        if not g or not g["participants"]:
-            await interaction.channel.send("😢 Ninguém participou do sorteio."); return
-        winner = interaction.guild.get_member(random.choice(g["participants"]))
-        await interaction.channel.send(embed=discord.Embed(
-            title="🎉 Resultado do Sorteio!",
-            description=f"**Prêmio:** {premio}\n**Vencedor:** {winner.mention if winner else '?'} 🏆",
-            color=discord.Color.gold()
-        ))
+
+        async def end_giveaway():
+            await asyncio.sleep(minutos * 60)
+            g = giveaways.pop(msg.id, None)
+            if not g or not g["participants"]:
+                await interaction.channel.send("😢 Ninguém participou do sorteio."); return
+            winner = interaction.guild.get_member(random.choice(g["participants"]))
+            await interaction.channel.send(embed=discord.Embed(
+                title="🎉 Resultado do Sorteio!",
+                description=f"**Prêmio:** {premio}\n**Vencedor:** {winner.mention if winner else '?'} 🏆",
+                color=discord.Color.gold()
+            ))
+        asyncio.create_task(end_giveaway())
+
 
 
     # ── ENQUETE ───────────────────────────────────────────────
