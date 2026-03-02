@@ -48,7 +48,7 @@ async def get_player(interaction: discord.Interaction) -> wavelink.Player | None
 
 async def search_track(query: str) -> wavelink.Playable | None:
     """
-    Busca uma faixa. Ordem: YouTube Music → YouTube → SoundCloud.
+    Busca uma faixa. Ordem: YouTube Music → YouTube.
     Loga cada falha para diagnóstico no journal do VPS.
     """
     # Verificar nó conectado
@@ -61,7 +61,7 @@ async def search_track(query: str) -> wavelink.Playable | None:
         print(f"[MÚSICA] ❌ Erro ao obter nó Lavalink: {e}")
         return None
 
-    # 1) URL direta — usar sem prefixo
+    # 1) URL direta
     if query.startswith("http"):
         try:
             tracks = await wavelink.Playable.search(query)
@@ -71,34 +71,25 @@ async def search_track(query: str) -> wavelink.Playable | None:
             print(f"[MÚSICA] ❌ Erro URL direta: {e}")
         return None
 
-    # 2) YouTube Music (ytmsearch) — mais disponível em servidores públicos
+    # 2) YouTube Music (ytmsearch)
     try:
         tracks = await wavelink.Playable.search(f"ytmsearch:{query}")
         if tracks:
-            print(f"[MÚSICA] ✅ Encontrado via YouTube Music: {query}")
+            print(f"[MÚSICA] ✅ YouTube Music: {query}")
             return tracks[0] if isinstance(tracks, list) else tracks
     except Exception as e:
         print(f"[MÚSICA] ⚠️ Erro YouTube Music: {e}")
 
-    # 3) YouTube normal (ytsearch)
+    # 3) YouTube (ytsearch)
     try:
         tracks = await wavelink.Playable.search(f"ytsearch:{query}")
         if tracks:
-            print(f"[MÚSICA] ✅ Encontrado via YouTube: {query}")
+            print(f"[MÚSICA] ✅ YouTube: {query}")
             return tracks[0] if isinstance(tracks, list) else tracks
     except Exception as e:
         print(f"[MÚSICA] ⚠️ Erro YouTube: {e}")
 
-    # 4) SoundCloud (scsearch)
-    try:
-        tracks = await wavelink.Playable.search(f"scsearch:{query}")
-        if tracks:
-            print(f"[MÚSICA] ✅ Encontrado via SoundCloud: {query}")
-            return tracks[0] if isinstance(tracks, list) else tracks
-    except Exception as e:
-        print(f"[MÚSICA] ⚠️ Erro SoundCloud: {e}")
-
-    print(f"[MÚSICA] ❌ Nenhuma fonte encontrou: {query}")
+    print(f"[MÚSICA] ❌ Não encontrado: {query}")
     return None
 
 
@@ -126,26 +117,45 @@ def setup_commands(tree: app_commands.CommandTree, bot):
     @bot.event
     async def on_wavelink_track_end(payload: wavelink.TrackEndEventPayload):
         player: wavelink.Player = payload.player
+
+        reason_name = payload.reason.name if payload.reason else "N/A"
+        q_size = player.queue.count if player else "N/A"
+        print(f"[FILA] track_end | reason={reason_name} | fila={q_size} | connected={player.connected if player else False}")
+
         if not player or not player.connected:
+            print("[FILA] player desconectado, ignorando.")
             return
 
-        # Só avança automaticamente ao terminar, falhar ou pular — não ao trocar diretamente
+        # Só avança ao terminar naturalmente, falhar ou parar (pular)
+        # REPLACED = tocou nova música diretamente (não avançar fila)
+        # CLEANUP  = player destruído (não avançar fila)
         if payload.reason not in (
             wavelink.TrackEndReason.finished,
             wavelink.TrackEndReason.load_failed,
-            wavelink.TrackEndReason.stopped,  # /skip usa stop() internamente
+            wavelink.TrackEndReason.stopped,
         ):
+            print(f"[FILA] reason={reason_name} ignorado.")
             return
 
         # Modo repeat: repetir a faixa atual
         if player.queue.mode == wavelink.QueueMode.loop and payload.track:
-            await player.play(payload.track)
+            try:
+                await player.play(payload.track)
+                print(f"[FILA] 🔁 Repetindo: {payload.track.title}")
+            except Exception as e:
+                print(f"[FILA] ❌ Erro ao repetir faixa: {e}")
             return
 
         # Próxima faixa na fila
         if not player.queue.is_empty:
             track = player.queue.get()
-            await player.play(track)
+            try:
+                await player.play(track)
+                print(f"[FILA] ▶️ Tocando próxima: {track.title}")
+            except Exception as e:
+                print(f"[FILA] ❌ Erro ao tocar próxima: {e}")
+        else:
+            print("[FILA] Fila vazia, parando.")
 
     # ── Erro global ─────────────────────────────────────────────────────────
     @tree.error
