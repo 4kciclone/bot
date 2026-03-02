@@ -140,21 +140,18 @@ async def on_wavelink_track_end(payload: wavelink.TrackEndEventPayload):
     """Avança a fila quando a faixa atual termina."""
     player: wavelink.Player = payload.player
 
-    reason_name = payload.reason.name if payload.reason else "N/A"
+    # Em wavelink 3.4.x payload.reason é uma string, não um enum
+    reason = str(payload.reason)  # ex: 'finished', 'loadFailed', 'stopped', 'replaced'
     q_size = player.queue.count if player else "N/A"
     connected = player.connected if player else False
-    print(f"[FILA] track_end | reason={reason_name} | fila={q_size} | connected={connected}", flush=True)
+    print(f"[FILA] track_end | reason={reason} | fila={q_size} | connected={connected}", flush=True)
 
     if not player or not player.connected:
         return
 
     # Só avança ao terminar, falhar ou parar (pular) — não ao substituir diretamente
-    if payload.reason not in (
-        wavelink.TrackEndReason.finished,
-        wavelink.TrackEndReason.load_failed,
-        wavelink.TrackEndReason.stopped,
-    ):
-        print(f"[FILA] reason={reason_name} ignorado.", flush=True)
+    if reason not in ("finished", "loadFailed", "stopped"):
+        print(f"[FILA] reason={reason} ignorado.", flush=True)
         return
 
     # Modo repeat: repetir a faixa atual

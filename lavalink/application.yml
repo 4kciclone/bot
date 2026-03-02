@@ -13,7 +13,7 @@ lavalink:
   server:
     password: "youshallnotpass"
     sources:
-      youtube: true       # manter ativo como fallback
+      youtube: false      # plugin cuida de tudo — extrator embutido está desatualizado
       bandcamp: true
       soundcloud: false
       twitch: true
