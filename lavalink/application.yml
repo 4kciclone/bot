@@ -52,9 +52,7 @@ plugins:
     allowDirectPlaylistIds: true
     clients:
       - MUSIC
-      - ANDROID
       - IOS
-      - TV_EMBEDDED
 
 metrics:
   prometheus:
