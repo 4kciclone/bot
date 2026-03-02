@@ -74,7 +74,7 @@ async def get_player(interaction: discord.Interaction) -> wavelink.Player | None
 
 
 async def search_track(query: str) -> wavelink.Playable | None:
-    """Busca uma faixa no YouTube via Lavalink local."""
+    """Busca uma faixa via LavaSrc/yt-dlp."""
     # URL direta
     if query.startswith("http"):
         try:
@@ -85,8 +85,8 @@ async def search_track(query: str) -> wavelink.Playable | None:
             print(f"[MÚSICA] Erro URL: {e}", flush=True)
         return None
 
-    # YouTube (ytsearch) → YouTube Music (ytmsearch) como fallback
-    for prefix in ("ytsearch", "ytmsearch"):
+    # yt-dlp search (prefixo ytdlpsearch:)
+    for prefix in ("ytsearch",):
         try:
             result = await wavelink.Playable.search(f"{prefix}:{query}")
             if result:
