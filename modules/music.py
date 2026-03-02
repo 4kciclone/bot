@@ -108,54 +108,6 @@ async def search_playlist(url: str) -> list[wavelink.Playable]:
 
 def setup_commands(tree: app_commands.CommandTree, bot):
 
-    # ── Conectar ao Lavalink ao iniciar ─────────────────────────────────────
-    @bot.event
-    async def on_ready_lavalink():
-        pass  # conexão feita em bot.py via setup_hook
-
-    # ── Avançar fila quando faixa termina ───────────────────────────────────
-    @bot.event
-    async def on_wavelink_track_end(payload: wavelink.TrackEndEventPayload):
-        player: wavelink.Player = payload.player
-
-        reason_name = payload.reason.name if payload.reason else "N/A"
-        q_size = player.queue.count if player else "N/A"
-        print(f"[FILA] track_end | reason={reason_name} | fila={q_size} | connected={player.connected if player else False}")
-
-        if not player or not player.connected:
-            print("[FILA] player desconectado, ignorando.")
-            return
-
-        # Só avança ao terminar naturalmente, falhar ou parar (pular)
-        # REPLACED = tocou nova música diretamente (não avançar fila)
-        # CLEANUP  = player destruído (não avançar fila)
-        if payload.reason not in (
-            wavelink.TrackEndReason.finished,
-            wavelink.TrackEndReason.load_failed,
-            wavelink.TrackEndReason.stopped,
-        ):
-            print(f"[FILA] reason={reason_name} ignorado.")
-            return
-
-        # Modo repeat: repetir a faixa atual
-        if player.queue.mode == wavelink.QueueMode.loop and payload.track:
-            try:
-                await player.play(payload.track)
-                print(f"[FILA] 🔁 Repetindo: {payload.track.title}")
-            except Exception as e:
-                print(f"[FILA] ❌ Erro ao repetir faixa: {e}")
-            return
-
-        # Próxima faixa na fila
-        if not player.queue.is_empty:
-            track = player.queue.get()
-            try:
-                await player.play(track)
-                print(f"[FILA] ▶️ Tocando próxima: {track.title}")
-            except Exception as e:
-                print(f"[FILA] ❌ Erro ao tocar próxima: {e}")
-        else:
-            print("[FILA] Fila vazia, parando.")
 
     # ── Erro global ─────────────────────────────────────────────────────────
     @tree.error

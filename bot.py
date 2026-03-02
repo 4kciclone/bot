@@ -136,6 +136,49 @@ async def on_message(message):
 
 
 @bot.event
+async def on_wavelink_track_end(payload: wavelink.TrackEndEventPayload):
+    """Avança a fila quando a faixa atual termina."""
+    player: wavelink.Player = payload.player
+
+    reason_name = payload.reason.name if payload.reason else "N/A"
+    q_size = player.queue.count if player else "N/A"
+    connected = player.connected if player else False
+    print(f"[FILA] track_end | reason={reason_name} | fila={q_size} | connected={connected}", flush=True)
+
+    if not player or not player.connected:
+        return
+
+    # Só avança ao terminar, falhar ou parar (pular) — não ao substituir diretamente
+    if payload.reason not in (
+        wavelink.TrackEndReason.finished,
+        wavelink.TrackEndReason.load_failed,
+        wavelink.TrackEndReason.stopped,
+    ):
+        print(f"[FILA] reason={reason_name} ignorado.", flush=True)
+        return
+
+    # Modo repeat: repetir a faixa atual
+    if player.queue.mode == wavelink.QueueMode.loop and payload.track:
+        try:
+            await player.play(payload.track)
+            print(f"[FILA] 🔁 Repetindo: {payload.track.title}", flush=True)
+        except Exception as e:
+            print(f"[FILA] ❌ Erro ao repetir: {e}", flush=True)
+        return
+
+    # Próxima faixa na fila
+    if not player.queue.is_empty:
+        track = player.queue.get()
+        try:
+            await player.play(track)
+            print(f"[FILA] ▶️ Próxima: {track.title}", flush=True)
+        except Exception as e:
+            print(f"[FILA] ❌ Erro ao tocar próxima: {e}", flush=True)
+    else:
+        print("[FILA] Fila vazia, parando.", flush=True)
+
+
+@bot.event
 async def on_reaction_add(reaction, user):
     if user.bot: return
     # Verificar votos de arte
