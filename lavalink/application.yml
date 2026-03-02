@@ -51,12 +51,11 @@ plugins:
     allowDirectVideoIds: true
     allowDirectPlaylistIds: true
     clients:
-      - TVHTML5EMBEDDED  # TV embutido — mais confiável, contorna restrições
-      - IOS              # Cliente iOS — estável, bom fallback
-      - MUSIC            # YouTube Music — fallback adicional
-    cookies: "/root/gatocomics-bot/cookies.txt"  # cookies para autenticação
+      - IOS    # iOS cliente — confirmado funcional em 1.18.0
+      - MUSIC  # WEB_REMIX (YouTube Music) — funcional
+      - WEB    # Web padrão — fallback
     oauth:
-      enabled: false
+      enabled: true   # autenticação OAuth — resolve HTTP 400/403 do YouTube
 
 metrics:
   prometheus:
