@@ -7,7 +7,7 @@ server:
 lavalink:
   plugins:
     # Plugin oficial do YouTube (substitui o extrator padrão e contorna bloqueios)
-    - dependency: "dev.lavalink.youtube:youtube-plugin:1.11.5"
+    - dependency: "dev.lavalink.youtube:youtube-plugin:1.18.0"
       repository: "https://maven.lavalink.dev/releases"
 
   server:
