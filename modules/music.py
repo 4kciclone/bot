@@ -3,8 +3,9 @@ from discord import app_commands
 from discord.ext import commands
 import asyncio
 import random
-import subprocess
 import json
+import urllib.request
+import urllib.parse
 from config import *
 
 # ── Playlists salvas em memória ────────────────────────────────────────────────
@@ -19,17 +20,13 @@ RANDOM_QUERIES = [
 # ── Estado do player por guild ─────────────────────────────────────────────────
 guild_queues = {}  # {guild_id: {"queue": [], "current": None, "repeat": False, "volume": 0.5}}
 
-YTDLP_OPTS = [
-    "yt-dlp", "--no-warnings", "-q",
-    "-f", "bestaudio/best",
-    "--no-playlist",
-    "-o", "-",  # stdout
-]
-
 FFMPEG_OPTS = {
     "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
     "options": "-vn -b:a 128k",
 }
+
+COOKIES_YT = "/root/gatocomics-bot/cookies.txt"
+COOKIES_DZ = "/root/gatocomics-bot/deezer_cookies.txt"
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -59,16 +56,41 @@ def get_guild_data(guild_id):
     return guild_queues[guild_id]
 
 
-async def search_ytdlp(query: str) -> dict | None:
-    """Busca uma faixa via yt-dlp. Retorna dict com title, url, duration, webpage_url."""
+async def search_deezer_api(query: str) -> dict | None:
+    """Busca na API pública do Deezer. Retorna {id, title, artist, duration}."""
     try:
-        cookies = "/root/gatocomics-bot/cookies.txt"
-        base_cmd = ["yt-dlp", "--no-warnings", "-q", "-j", "--no-playlist",
-                    "--cookies", cookies]
-        if query.startswith("http"):
-            cmd = base_cmd + [query]
-        else:
-            cmd = base_cmd + [f"ytsearch:{query}"]
+        encoded = urllib.parse.quote(query)
+        url = f"https://api.deezer.com/search?q={encoded}&limit=5"
+
+        def _fetch():
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                return json.loads(resp.read().decode())
+
+        data = await asyncio.get_event_loop().run_in_executor(None, _fetch)
+        tracks = data.get("data", [])
+        if not tracks:
+            return None
+
+        t = tracks[0]
+        return {
+            "id": t["id"],
+            "title": f"{t['artist']['name']} - {t['title']}",
+            "duration": t.get("duration", 0),
+            "deezer_url": t.get("link", f"https://www.deezer.com/track/{t['id']}"),
+        }
+    except Exception as e:
+        print(f"[DEEZER] ⚠️ API erro: {e}", flush=True)
+        return None
+
+
+async def extract_audio(url: str, cookies: str = None) -> dict | None:
+    """Usa yt-dlp para extrair URL de áudio de qualquer fonte."""
+    try:
+        cmd = ["yt-dlp", "--no-warnings", "-q", "-j", "--no-playlist"]
+        if cookies:
+            cmd += ["--cookies", cookies]
+        cmd.append(url)
 
         proc = await asyncio.create_subprocess_exec(
             *cmd,
@@ -78,35 +100,64 @@ async def search_ytdlp(query: str) -> dict | None:
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
 
         if proc.returncode != 0:
-            print(f"[MÚSICA] ⚠️ yt-dlp erro: {stderr.decode()[:200]}", flush=True)
+            err = stderr.decode()[:200]
+            print(f"[YTDLP] ⚠️ erro: {err}", flush=True)
             return None
 
         data = json.loads(stdout.decode())
-        # Pegar URL do melhor formato de áudio
-        url = data.get("url")
-        if not url:
-            # Tentar extrair de formatos
+        audio_url = data.get("url")
+        if not audio_url:
             formats = data.get("formats", [])
             audio_formats = [f for f in formats if f.get("acodec") != "none" and f.get("url")]
             if audio_formats:
-                url = audio_formats[-1]["url"]
+                audio_url = audio_formats[-1]["url"]
 
-        if not url:
-            print(f"[MÚSICA] ❌ Sem URL de áudio para: {query}", flush=True)
+        if not audio_url:
             return None
 
         return {
             "title": data.get("title", "Desconhecido"),
-            "url": url,
+            "url": audio_url,
             "duration": data.get("duration", 0),
             "webpage_url": data.get("webpage_url", ""),
         }
     except asyncio.TimeoutError:
-        print(f"[MÚSICA] ❌ Timeout buscando: {query}", flush=True)
+        print(f"[YTDLP] ❌ Timeout", flush=True)
         return None
     except Exception as e:
-        print(f"[MÚSICA] ❌ Erro: {e}", flush=True)
+        print(f"[YTDLP] ❌ Erro: {e}", flush=True)
         return None
+
+
+async def search_track(query: str) -> dict | None:
+    """Busca e extrai áudio. Prioridade: Deezer → YouTube."""
+    # URL direta
+    if query.startswith("http"):
+        cookies = COOKIES_DZ if "deezer" in query else COOKIES_YT
+        result = await extract_audio(query, cookies)
+        if result:
+            print(f"[MÚSICA] ✅ URL: {result['title']}", flush=True)
+            return result
+        return None
+
+    # 1. Buscar no Deezer
+    dz = await search_deezer_api(query)
+    if dz:
+        print(f"[DEEZER] 🔍 Encontrado: {dz['title']}", flush=True)
+        result = await extract_audio(dz["deezer_url"], COOKIES_DZ)
+        if result:
+            print(f"[MÚSICA] ✅ Deezer: {result['title']}", flush=True)
+            return result
+        print(f"[DEEZER] ⚠️ Extração falhou, tentando YouTube...", flush=True)
+
+    # 2. Fallback: YouTube com cookies
+    result = await extract_audio(f"ytsearch:{query}", COOKIES_YT)
+    if result:
+        print(f"[MÚSICA] ✅ YouTube: {result['title']}", flush=True)
+        return result
+
+    print(f"[MÚSICA] ❌ Não encontrado: {query}", flush=True)
+    return None
 
 
 async def play_next(guild: discord.Guild):
