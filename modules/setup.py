@@ -248,6 +248,35 @@ def setup_commands(tree: app_commands.CommandTree, bot):
         )
         await interaction.followup.send(embed=embed_done, ephemeral=True)
 
+    @tree.command(name="cleanup", description="🧹 Remove todos os canais e categorias criados pelo setup (Dono/Admin)")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def cleanup(interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        guild = interaction.guild
+        deleted_count = 0
+
+        # Categorias e canais conhecidos do setup
+        targets = [
+            "📌 INÍCIO", "📖 WEBTOONS", "🎨 CRIADORES", "💬 COMUNIDADE",
+            "🎮 JOGOS", "🎵 VOZ & MÚSICA", "🏆 RANKING", "🎫 SUPORTE",
+            STATS_CATEGORY
+        ]
+
+        # Deletar canais dentro dessas categorias primeiro
+        for category in guild.categories:
+            if category.name in targets:
+                for channel in category.channels:
+                    try:
+                        await channel.delete()
+                        deleted_count += 1
+                    except: pass
+                try:
+                    await category.delete()
+                    deleted_count += 1
+                except: pass
+
+        await interaction.followup.send(f"✅ Limpeza concluída! **{deleted_count}** itens removidos.", ephemeral=True)
+
     @tree.command(name="ajuda", description="❓ Veja todos os comandos e funcionalidades da Gato Comics")
     async def ajuda(interaction: discord.Interaction):
         embed = discord.Embed(
@@ -270,27 +299,28 @@ def setup_commands(tree: app_commands.CommandTree, bot):
 
         embed.add_field(
             name="🎫 Suporte & Tickets",
-            value="Vá em <#123456789012345678> (abrir-ticket) para falar com a staff.",
+            value="Comando `/setup` cria o painel de tickets.",
             inline=True
         )
 
         embed.add_field(
-            name="🔨 Moderação",
-            value="Nossa IA modera o chat automaticamente. Evite spam e conteúdo impróprio.",
+            name="🎵 Música",
+            value="Recomendamos o **Jockie Music** para a melhor experiência sonora.",
             inline=False
         )
 
         embed.add_field(
-            name="🎵 Música (Recomendações)",
-            value="Para ouvir música, use o **Jockie Music** no canal <#123456789012345678>.\nUse `/play` seguido do nome da música!",
+            name="🎮 Jogos",
+            value="**Mudae**: Colecione personagens.\n**Gartic**: Desenho em grupo.\n**Dank Memer**: Economia e zoeira.",
             inline=False
         )
 
-        embed.add_field(
-            name="🎮 Jogos (Recomendações)",
-            value="**Mudae**: Colecione personagens de anime.\n**Gartic**: Desenhe e adivinhe.\n**Dank Memer**: Economia e memes.",
-            inline=False
-        )
+        # Botões de link
+        view = discord.ui.View()
+        view.add_item(discord.ui.Button(label="🎵 Jockie Music", url="https://www.jockiemusic.com/invite", style=discord.ButtonStyle.link))
+        view.add_item(discord.ui.Button(label="💎 Mudae", url="https://discord.com/oauth2/authorize?client_id=432610292342587392&scope=bot&permissions=537213952", style=discord.ButtonStyle.link))
+        view.add_item(discord.ui.Button(label="🎨 Gartic", url="https://discord.com/oauth2/authorize?client_id=694921670984138762&scope=bot&permissions=277025810432", style=discord.ButtonStyle.link))
+        view.add_item(discord.ui.Button(label="🐸 Dank Memer", url="https://discord.com/oauth2/authorize?client_id=270904126974590976&scope=bot&permissions=8", style=discord.ButtonStyle.link))
 
         embed.set_footer(text="Gato Comics • A sua editora de webtoons 🐱")
-        await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(embed=embed, view=view)
