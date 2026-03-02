@@ -166,7 +166,7 @@ async def check_missions(guild, member, action_type):
 def setup_commands(tree: app_commands.CommandTree, bot):
 
     @tree.command(name="rank", description="📊 Seu nível e XP")
-    @channel_only("🤖・comandos-bot")
+    @channel_only(["🤖・comandos-bot", "🏆・ranking"])
     @app_commands.checks.cooldown(1, 60, key=lambda i: i.user.id)
     async def rank(interaction: discord.Interaction):
         data   = get_xp(interaction.guild.id, interaction.user.id)
@@ -215,7 +215,7 @@ def setup_commands(tree: app_commands.CommandTree, bot):
 
 
     @tree.command(name="missoes", description="📋 Veja suas missões diárias")
-    @channel_only("🤖・comandos-bot")
+    @channel_only(["🤖・comandos-bot", "🏆・ranking"])
     async def missoes(interaction: discord.Interaction):
         gid   = str(interaction.guild.id)
         uid   = str(interaction.user.id)
@@ -239,7 +239,7 @@ def setup_commands(tree: app_commands.CommandTree, bot):
 
 
     @tree.command(name="streak", description="🔥 Veja seu streak de presença")
-    @channel_only("🤖・comandos-bot")
+    @channel_only(["🤖・comandos-bot", "🏆・ranking"])
     async def streak_cmd(interaction: discord.Interaction):
         s = get_streak(interaction.guild.id, interaction.user.id)
         await interaction.response.send_message(embed=discord.Embed(
@@ -249,7 +249,7 @@ def setup_commands(tree: app_commands.CommandTree, bot):
 
 
     @tree.command(name="loja", description="🛒 Loja de cargos com XP")
-    @channel_only("🤖・comandos-bot")
+    @channel_only(["🤖・comandos-bot", "🏆・ranking"])
     async def loja(interaction: discord.Interaction):
         data  = get_xp(interaction.guild.id, interaction.user.id)
         total = data.get("total_xp", 0)
@@ -263,7 +263,7 @@ def setup_commands(tree: app_commands.CommandTree, bot):
 
 
     @tree.command(name="comprar", description="💳 Compra um cargo da loja")
-    @channel_only("🤖・comandos-bot")
+    @channel_only(["🤖・comandos-bot", "🏆・ranking"])
     async def comprar(interaction: discord.Interaction, item: str):
         if item not in shop_items:
             await interaction.response.send_message("❌ Item não encontrado. Use `/loja` para ver os itens.", ephemeral=True)
@@ -288,7 +288,7 @@ def setup_commands(tree: app_commands.CommandTree, bot):
 
 
     @tree.command(name="darxp", description="🎁 Transfere XP para outro membro")
-    @channel_only("🤖・comandos-bot")
+    @channel_only(["🤖・comandos-bot", "🏆・ranking"])
     async def darxp(interaction: discord.Interaction, membro: discord.Member, quantidade: int):
         if quantidade <= 0:
             await interaction.response.send_message("❌ Quantidade inválida.", ephemeral=True); return

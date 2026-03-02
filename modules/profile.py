@@ -7,7 +7,7 @@ from config import *
 def setup_commands(tree: app_commands.CommandTree, bot):
 
     @tree.command(name="perfil", description="🎨 Veja o perfil completo de um membro")
-    @channel_only("🤖・comandos-bot")
+    @channel_only(["🤖・comandos-bot", "🏆・ranking"])
     @app_commands.checks.cooldown(1, 30, key=lambda i: i.user.id)
     async def perfil(interaction: discord.Interaction, membro: discord.Member = None):
         membro = membro or interaction.user

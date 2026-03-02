@@ -65,13 +65,17 @@ def add_warn(gid, uid, reason, by):
     warns_data[g][u].append({"reason": reason, "by": str(by), "at": datetime.datetime.utcnow().isoformat()})
     return len(warns_data[g][u])
 
-def channel_only(channel_name: str):
+def channel_only(channel_names: list):
     from discord import app_commands
     async def predicate(interaction):
         import discord
-        ch = discord.utils.get(interaction.guild.channels, name=channel_name)
-        if ch and interaction.channel.id != ch.id:
-            await interaction.response.send_message(f"❌ Use este comando em {ch.mention}!", ephemeral=True)
+        # Se for uma string única, transforma em lista para compatibilidade
+        targets = [channel_names] if isinstance(channel_names, str) else channel_names
+        
+        current_ch = interaction.channel.name
+        if not any(name == current_ch for name in targets):
+            mentions = ", ".join([f"#{n}" for n in targets])
+            await interaction.response.send_message(f"❌ Use este comando em: {mentions}!", ephemeral=True)
             return False
         return True
     return app_commands.check(predicate)

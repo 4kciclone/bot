@@ -170,18 +170,25 @@ def setup_commands(tree: app_commands.CommandTree, bot):
 
         ticket_ch = rules_ch = updates_ch = None
 
-        for cat_name, channels in structure:
-            cat = discord.utils.get(guild.categories, name=cat_name) or await guild.create_category(cat_name, overwrites=ow_default())
+            cat = discord.utils.get(guild.categories, name=cat_name)
+            if not cat:
+                cat = await guild.create_category(cat_name, overwrites=ow_default())
+            else:
+                # Sincroniza overwrites da categoria
+                await cat.edit(overwrites=ow_default())
+
             for ch_name, ch_type, topic, overwrites in channels:
-                existing = discord.utils.get(guild.channels, name=ch_name)
-                if existing:
-                    ch = existing
-                elif ch_type == "text":
-                    ch = await guild.create_text_channel(ch_name, category=cat, topic=topic, overwrites=overwrites)
-                    logs.append(f"Canal: {ch_name}")
+                ch = discord.utils.get(guild.channels, name=ch_name)
+                if not ch:
+                    if ch_type == "text":
+                        ch = await guild.create_text_channel(ch_name, category=cat, topic=topic, overwrites=overwrites)
+                    else:
+                        ch = await guild.create_voice_channel(ch_name, category=cat, overwrites=overwrites)
+                    logs.append(f"Criado: {ch_name}")
                 else:
-                    ch = await guild.create_voice_channel(ch_name, category=cat, overwrites=overwrites)
-                    logs.append(f"Voz: {ch_name}")
+                    # Sincroniza overwrites do canal existente
+                    await ch.edit(overwrites=overwrites, category=cat)
+                    logs.append(f"Sincronizado: {ch_name}")
 
                 if ch_name == "🎫・abrir-ticket": ticket_ch  = ch
                 if ch_name == "📋・regras":       rules_ch   = ch
