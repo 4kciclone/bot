@@ -44,7 +44,16 @@ async def on_ready():
     bot.add_view(TicketCategoryView())
     bot.add_view(TicketCloseView())
 
-    await tree.sync()
+    # Sincronização forçada para o servidor específico (muito mais rápido que global)
+    if GUILD_ID:
+        guild = discord.Object(id=GUILD_ID)
+        tree.copy_global_to(guild=guild)
+        await tree.sync(guild=guild)
+        print(f"📋 Comandos sincronizados para o servidor: {GUILD_ID}")
+    else:
+        await tree.sync()
+        print("📋 Comandos sincronizados globalmente")
+
     await bot.change_presence(
         activity=discord.Activity(type=discord.ActivityType.watching, name="🐱 Gato Comics")
     )
@@ -53,7 +62,20 @@ async def on_ready():
     start_tasks(bot)
 
     print(f"✅ {bot.user} online! | {len(bot.guilds)} servidor(es)")
-    print(f"📋 Comandos sincronizados!")
+
+
+@bot.command()
+@commands.is_owner()
+async def sync(ctx):
+    """Comando manual para forçar a sincronização de comandos slash"""
+    if GUILD_ID:
+        guild = discord.Object(id=GUILD_ID)
+        tree.copy_global_to(guild=guild)
+        await tree.sync(guild=guild)
+        await ctx.send(f"✅ Comandos sincronizados para o servidor {GUILD_ID}!")
+    else:
+        await tree.sync()
+        await ctx.send("✅ Comandos sincronizados globalmente!")
 
 
 @bot.event
