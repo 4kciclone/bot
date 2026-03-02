@@ -61,10 +61,10 @@ plugins:
     allowDirectVideoIds: true
     allowDirectPlaylistIds: true
     clients:
-      - MUSIC
-      - ANDROID_VR
-      - WEB
-      - WEBEMBEDDED
+      - TV               # ÚNICO cliente OAuth-compatível (requer login)
+      - TVHTML5_SIMPLY   # TV simplificado, não requer login
+      - WEB              # Web padrão
+      - MUSIC            # YouTube Music (busca)
     oauth:
       enabled: true
       refreshToken: "$TOKEN"
