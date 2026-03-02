@@ -51,6 +51,15 @@ async def on_ready():
     await bot.change_presence(
         activity=discord.Activity(type=discord.ActivityType.watching, name="🐱 Gato Comics")
     )
+
+    # Iniciar tasks agendadas
+    if hasattr(bot, '_update_stats') and not bot._update_stats.is_running():
+        bot._update_stats.start()
+    if hasattr(bot, '_check_scheduled') and not bot._check_scheduled.is_running():
+        bot._check_scheduled.start()
+    if hasattr(bot, '_weekly_ranking') and not bot._weekly_ranking.is_running():
+        bot._weekly_ranking.start()
+
     print(f"✅ {bot.user} online! | {len(bot.guilds)} servidor(es)")
     print(f"📋 Comandos sincronizados!")
 

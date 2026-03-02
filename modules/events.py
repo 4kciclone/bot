@@ -164,6 +164,7 @@ def setup_commands(tree: app_commands.CommandTree, bot):
                 description="\n".join(lines), color=0xFF6B9D, timestamp=datetime.datetime.utcnow()
             ))
 
-    update_stats.start()
-    check_scheduled.start()
-    weekly_ranking.start()
+    # Tasks são iniciadas pelo on_ready no bot.py
+    bot._update_stats    = update_stats
+    bot._check_scheduled = check_scheduled
+    bot._weekly_ranking  = weekly_ranking
