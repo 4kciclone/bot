@@ -6,14 +6,13 @@ server:
 
 lavalink:
   plugins:
-    # Plugin oficial do YouTube para Lavalink v4
     - dependency: "dev.lavalink.youtube:youtube-plugin:1.18.0"
       repository: "https://maven.lavalink.dev/releases"
 
   server:
     password: "youshallnotpass"
     sources:
-      youtube: false      # plugin cuida de tudo — extrator embutido está desatualizado
+      youtube: false      # OBRIGATÓRIO: desabilitar extrator embutido quando usando o plugin
       bandcamp: true
       soundcloud: false
       twitch: true
@@ -43,19 +42,23 @@ lavalink:
     soundcloudSearchEnabled: false
     gc-warnings: true
 
-# Plugin YouTube — configuração
+# Configuração do youtube-source plugin (conforme documentação oficial)
+# https://github.com/lavalink-devs/youtube-source
 plugins:
   youtube:
     enabled: true
     allowSearch: true
     allowDirectVideoIds: true
     allowDirectPlaylistIds: true
+    # Clientes oficiais recomendados (ordem = prioridade)
     clients:
-      - IOS    # iOS cliente — confirmado funcional em 1.18.0
-      - MUSIC  # WEB_REMIX (YouTube Music) — funcional
-      - WEB    # Web padrão — fallback
+      - MUSIC
+      - ANDROID_VR
+      - WEB
+      - WEBEMBEDDED
     oauth:
-      enabled: true   # autenticação OAuth — resolve HTTP 400/403 do YouTube
+      enabled: true
+      # refreshToken: "COLOCAR_APENAS_NO_VPS"  # NÃO commitar o token! Configurar em /opt/lavalink/application.yml
 
 metrics:
   prometheus:

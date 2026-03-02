@@ -5,7 +5,7 @@
 # ──────────────────────────────────────────────────────────────────────────────
 set -e
 
-LAVALINK_VERSION="4.0.8"
+LAVALINK_VERSION="4.2.1"
 LAVALINK_DIR="/opt/lavalink"
 LAVALINK_JAR="$LAVALINK_DIR/Lavalink.jar"
 BOT_DIR="/root/gatocomics-bot"
