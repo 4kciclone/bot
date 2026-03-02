@@ -51,9 +51,10 @@ plugins:
     allowDirectVideoIds: true
     allowDirectPlaylistIds: true
     clients:
-      - MUSIC       # YouTube Music (mais estável)
-      - WEB         # YouTube Web
-      - ANDROID     # YouTube Android (fallback)
+      - TVHTML5EMBEDDED  # TV embutido — mais confiável, contorna restrições
+      - IOS              # Cliente iOS — estável, bom fallback
+      - MUSIC            # YouTube Music — fallback adicional
+    # cookies: "/root/gatocomics-bot/cookies.txt"  # descomente se tiver cookies exportados do YouTube
     oauth:
       enabled: false
 
