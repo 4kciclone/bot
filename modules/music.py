@@ -12,11 +12,20 @@ music_repeat  = {}  # {guild_id: bool}
 music_current_url = {}  # {guild_id: url}
 
 YDL_OPTS = {
-    'format': 'bestaudio/best',
+    'format': 'bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio/best',
     'quiet': True,
-    'default_search': 'ytsearch',
+    'no_warnings': True,
+    'default_search': 'ytsearch1',   # só 1 resultado = mais rápido
+    'extract_flat': False,
+    'skip_download': True,
+    'noplaylist': True,
     'cookiefile': '/root/gatocomics-bot/cookies.txt',
-    'noplaylist': False,
+    # Cache para não buscar a mesma música duas vezes
+    'cachedir': '/root/gatocomics-bot/.yt_cache',
+    # Conexões paralelas = mais rápido
+    'concurrent_fragment_downloads': 4,
+    # Timeout menor
+    'socket_timeout': 10,
 }
 FFMPEG_OPTS = {
     'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
