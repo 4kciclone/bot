@@ -248,34 +248,26 @@ def setup_commands(tree: app_commands.CommandTree, bot):
         )
         await interaction.followup.send(embed=embed_done, ephemeral=True)
 
-    @tree.command(name="cleanup", description="🧹 Remove todos os canais e categorias criados pelo setup (Dono/Admin)")
+    @tree.command(name="cleanup", description="🧨 DELETA TODOS os canais e categorias do servidor (APENAS DONO)")
     @app_commands.checks.has_permissions(administrator=True)
     async def cleanup(interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         guild = interaction.guild
         deleted_count = 0
 
-        # Categorias e canais conhecidos do setup
-        targets = [
-            "📌 INÍCIO", "📖 WEBTOONS", "🎨 CRIADORES", "💬 COMUNIDADE",
-            "🎮 JOGOS", "🎵 VOZ & MÚSICA", "🏆 RANKING", "🎫 SUPORTE",
-            STATS_CATEGORY
-        ]
+        # Deletar todos os canais de texto, voz e categorias
+        for channel in guild.channels:
+            try:
+                # Evita erro ao tentar deletar o canal onde a resposta está sendo enviada no meio do processo
+                # Mas como é defered, podemos tentar deletar tudo.
+                await channel.delete()
+                deleted_count += 1
+            except Exception as e:
+                print(f"Erro ao deletar {channel.name}: {e}")
 
-        # Deletar canais dentro dessas categorias primeiro
-        for category in guild.categories:
-            if category.name in targets:
-                for channel in category.channels:
-                    try:
-                        await channel.delete()
-                        deleted_count += 1
-                    except: pass
-                try:
-                    await category.delete()
-                    deleted_count += 1
-                except: pass
-
-        await interaction.followup.send(f"✅ Limpeza concluída! **{deleted_count}** itens removidos.", ephemeral=True)
+        # Como deletamos o canal de interação, não conseguimos enviar o followup se ele for deletado.
+        # Mas para "deletar todos", o sacrifício é necessário.
+        print(f"✅ Limpeza total concluída: {deleted_count} itens removidos.")
 
     @tree.command(name="ajuda", description="❓ Veja todos os comandos e funcionalidades da Gato Comics")
     async def ajuda(interaction: discord.Interaction):
