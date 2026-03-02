@@ -167,4 +167,179 @@ def setup_commands(tree: app_commands.CommandTree, bot):
 
         if vc.is_playing() or vc.is_paused():
             music_queues[gid].append((url, title))
-            embed = discord.Embed(description=f"📋 **{title}** adicionada à fila
+            embed = discord.Embed(description=f"📋 **{title}** adicionada à fila! (#{len(music_queues[gid])}) {source}", color=0xFF6B9D)
+        else:
+            music_queues[gid].insert(0, (url, title))
+            await play_next(interaction.guild, bot)
+            embed = discord.Embed(description=f"▶️ Tocando: **{title}** {source}", color=0xFF6B9D)
+        await interaction.followup.send(embed=embed)
+
+
+    @tree.command(name="playaleatorio", description="🎲 Toca uma música aleatória de anime/webtoon")
+    @music_only()
+    async def play_random(interaction: discord.Interaction):
+        await interaction.response.defer()
+        if not interaction.user.voice:
+            await interaction.followup.send("❌ Entre em um canal de voz primeiro!", ephemeral=True)
+            return
+        vc  = interaction.guild.voice_client or await interaction.user.voice.channel.connect()
+        gid = interaction.guild.id
+        if gid not in music_queues: music_queues[gid] = []
+
+        try:
+            query = random.choice(RANDOM_QUERIES)
+            url, title, source = await get_audio(query)
+        except:
+            await interaction.followup.send("❌ Erro ao buscar música aleatória.", ephemeral=True)
+            return
+
+        if vc.is_playing():
+            music_queues[gid].append((url, title))
+            embed = discord.Embed(description=f"🎲 Surpresa! **{title}** na fila! {source}", color=0xFF6B9D)
+        else:
+            music_queues[gid].insert(0, (url, title))
+            await play_next(interaction.guild, bot)
+            embed = discord.Embed(description=f"🎲 Tocando aleatório: **{title}** {source}", color=0xFF6B9D)
+        await interaction.followup.send(embed=embed)
+
+
+    @tree.command(name="skip", description="⏭️ Pula para a próxima música")
+    @music_only()
+    async def skip(interaction: discord.Interaction):
+        vc = interaction.guild.voice_client
+        if vc and (vc.is_playing() or vc.is_paused()):
+            vc.stop()
+            await interaction.response.send_message("⏭️ Pulando!", ephemeral=True)
+        else:
+            await interaction.response.send_message("❌ Nada tocando.", ephemeral=True)
+
+
+    @tree.command(name="pause", description="⏸️ Pausa a música")
+    @music_only()
+    async def pause(interaction: discord.Interaction):
+        vc = interaction.guild.voice_client
+        if vc and vc.is_playing():
+            vc.pause()
+            await interaction.response.send_message("⏸️ Pausado.", ephemeral=True)
+        else:
+            await interaction.response.send_message("❌ Nada tocando.", ephemeral=True)
+
+
+    @tree.command(name="resume", description="▶️ Retoma a música")
+    @music_only()
+    async def resume(interaction: discord.Interaction):
+        vc = interaction.guild.voice_client
+        if vc and vc.is_paused():
+            vc.resume()
+            await interaction.response.send_message("▶️ Retomado.", ephemeral=True)
+        else:
+            await interaction.response.send_message("❌ Nada pausado.", ephemeral=True)
+
+
+    @tree.command(name="stop", description="⏹️ Para e desconecta")
+    @music_only()
+    async def stop(interaction: discord.Interaction):
+        gid = interaction.guild.id
+        music_queues.pop(gid, None)
+        music_current.pop(gid, None)
+        music_repeat.pop(gid, None)
+        vc = interaction.guild.voice_client
+        if vc: await vc.disconnect(force=True)
+        await interaction.response.send_message("⏹️ Parado.", ephemeral=True)
+
+
+    @tree.command(name="queue", description="📋 Fila de músicas")
+    @music_only()
+    async def queue_cmd(interaction: discord.Interaction):
+        gid  = interaction.guild.id
+        cur  = music_current.get(gid, "Nenhuma")
+        rep  = "🔁 ON" if music_repeat.get(gid) else "🔁 OFF"
+        fila = music_queues.get(gid, [])
+        desc = f"▶️ **Tocando:** {cur} | {rep}\n\n"
+        desc += "\n".join([f"`{n+1}.` {t}" for n, (_, t) in enumerate(fila[:10])]) if fila else "*Fila vazia*"
+        if len(fila) > 10:
+            desc += f"\n*...e mais {len(fila)-10} músicas*"
+        await interaction.response.send_message(embed=discord.Embed(title="🎵 Fila", description=desc, color=0xFF6B9D))
+
+
+    @tree.command(name="nowplaying", description="🎵 Música tocando agora")
+    @music_only()
+    async def nowplaying(interaction: discord.Interaction):
+        cur = music_current.get(interaction.guild.id)
+        desc = f"▶️ **{cur}**" if cur else "❌ Nada tocando."
+        await interaction.response.send_message(embed=discord.Embed(description=desc, color=0xFF6B9D))
+
+
+    @tree.command(name="volume", description="🔊 Ajusta volume (0-100)")
+    @music_only()
+    async def volume(interaction: discord.Interaction, valor: int):
+        vc = interaction.guild.voice_client
+        if vc and vc.source:
+            vc.source.volume = max(0, min(valor, 100)) / 100
+            await interaction.response.send_message(f"🔊 Volume: **{valor}%**", ephemeral=True)
+        else:
+            await interaction.response.send_message("❌ Nada tocando.", ephemeral=True)
+
+
+    @tree.command(name="shuffle", description="🔀 Embaralha a fila de músicas")
+    @music_only()
+    async def shuffle(interaction: discord.Interaction):
+        gid  = interaction.guild.id
+        fila = music_queues.get(gid, [])
+        if not fila:
+            await interaction.response.send_message("❌ Fila vazia.", ephemeral=True)
+            return
+        random.shuffle(fila)
+        music_queues[gid] = fila
+        await interaction.response.send_message(f"🔀 Fila embaralhada! ({len(fila)} músicas)", ephemeral=True)
+
+
+    @tree.command(name="repeat", description="🔁 Ativa/desativa repetição da música atual")
+    @music_only()
+    async def repeat(interaction: discord.Interaction):
+        gid = interaction.guild.id
+        music_repeat[gid] = not music_repeat.get(gid, False)
+        status = "**ativada** 🔁" if music_repeat[gid] else "**desativada**"
+        await interaction.response.send_message(f"Repetição {status}", ephemeral=True)
+
+
+    @tree.command(name="playlist", description="📻 Gerencia suas playlists salvas")
+    @music_only()
+    async def playlist_cmd(interaction: discord.Interaction, acao: str, nome: str, musica: str = None):
+        uid = str(interaction.user.id)
+        if uid not in playlists: playlists[uid] = {}
+
+        if acao == "criar":
+            playlists[uid][nome] = []
+            await interaction.response.send_message(f"✅ Playlist **{nome}** criada!", ephemeral=True)
+        elif acao == "adicionar" and musica:
+            if nome not in playlists[uid]:
+                await interaction.response.send_message("❌ Playlist não encontrada.", ephemeral=True); return
+            playlists[uid][nome].append(musica)
+            await interaction.response.send_message(f"✅ **{musica}** adicionada à **{nome}**!", ephemeral=True)
+        elif acao == "tocar":
+            if nome not in playlists[uid] or not playlists[uid][nome]:
+                await interaction.response.send_message("❌ Playlist vazia ou não encontrada.", ephemeral=True); return
+            await interaction.response.defer()
+            if not interaction.user.voice:
+                await interaction.followup.send("❌ Entre em um canal de voz!", ephemeral=True); return
+            vc  = interaction.guild.voice_client or await interaction.user.voice.channel.connect()
+            gid = interaction.guild.id
+            if gid not in music_queues: music_queues[gid] = []
+            for q in playlists[uid][nome]:
+                try:
+                    url, title, _ = await get_audio(q)
+                    music_queues[gid].append((url, title))
+                except: pass
+            if not vc.is_playing():
+                await play_next(interaction.guild, bot)
+            await interaction.followup.send(f"▶️ Tocando playlist **{nome}** ({len(playlists[uid][nome])} músicas)!")
+        elif acao == "ver":
+            pls = playlists.get(uid, {})
+            if nome in pls:
+                desc = "\n".join([f"`{i+1}.` {m}" for i, m in enumerate(pls[nome])]) or "*Vazia*"
+                await interaction.response.send_message(embed=discord.Embed(title=f"📻 {nome}", description=desc, color=0xFF6B9D), ephemeral=True)
+            else:
+                await interaction.response.send_message("❌ Playlist não encontrada.", ephemeral=True)
+        else:
+            await interaction.response.send_message("❌ Ações: `criar`, `adicionar`, `tocar`, `ver`", ephemeral=True)
