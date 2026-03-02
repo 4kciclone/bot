@@ -6,16 +6,16 @@ server:
 
 lavalink:
   plugins:
-    # Plugin oficial do YouTube (substitui o extrator padrão)
-    - dependency: "dev.lavalink.youtube:youtube-plugin:1.11.2"
+    # Plugin oficial do YouTube para Lavalink v4
+    - dependency: "dev.lavalink.youtube:youtube-plugin:1.8.3"
       repository: "https://maven.lavalink.dev/releases"
 
   server:
     password: "youshallnotpass"
     sources:
-      youtube: false      # desabilita extrator embutido — usamos o plugin
+      youtube: true       # manter ativo como fallback
       bandcamp: true
-      soundcloud: true
+      soundcloud: false
       twitch: true
       vimeo: true
       http: true
@@ -40,22 +40,20 @@ lavalink:
     youtubePlaylistLoadLimit: 6
     playerUpdateInterval: 5
     youtubeSearchEnabled: true
-    soundcloudSearchEnabled: true
+    soundcloudSearchEnabled: false
     gc-warnings: true
 
-# Plugin YouTube — configuração extra
+# Plugin YouTube — configuração
 plugins:
   youtube:
     enabled: true
     allowSearch: true
     allowDirectVideoIds: true
     allowDirectPlaylistIds: true
-    # Múltiplos clientes aumentam a chance de sucesso
     clients:
-      - MUSIC
-      - WEB
-      - ANDROID_MUSIC
-      - TVHTML5EMBEDDED
+      - MUSIC       # YouTube Music (mais estável)
+      - WEB         # YouTube Web
+      - ANDROID     # YouTube Android (fallback)
     oauth:
       enabled: false
 
