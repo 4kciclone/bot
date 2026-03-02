@@ -71,7 +71,15 @@ def setup_commands(tree: app_commands.CommandTree, bot):
             overwrites = ow_default()
             bot_member = guild.get_member(bot_id)
             if bot_member:
-                overwrites[bot_member] = discord.PermissionOverwrite(view_channel=True, send_messages=True, embed_links=True, attach_files=True, use_external_emojis=True)
+                overwrites[bot_member] = discord.PermissionOverwrite(
+                    view_channel=True, 
+                    send_messages=True, 
+                    embed_links=True, 
+                    attach_files=True, 
+                    use_external_emojis=True,
+                    connect=True,
+                    speak=True
+                )
             return overwrites
 
         def ow_readonly():
@@ -133,8 +141,8 @@ def setup_commands(tree: app_commands.CommandTree, bot):
             ]),
             ("🎵 MÚSICA", [
                 ("🎵・pedir-musica",    "text",  "Use comandos de música aqui.",      ow_bot_dedicated(411916947773587459)),
-                ("🔊 Sala de Música 1", "voice", "",                                  ow_default()),
-                ("🔊 Sala de Música 2", "voice", "",                                  ow_default()),
+                ("🔊 Sala de Música 1", "voice", "",                                  ow_bot_dedicated(411916947773587459)),
+                ("🔊 Sala de Música 2", "voice", "",                                  ow_bot_dedicated(411916947773587459)),
             ]),
             ("🔊 VOZ GERAL", [
                 ("🔊 Sala Geral",       "voice", "",                                  ow_default()),
