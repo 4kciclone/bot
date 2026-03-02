@@ -39,18 +39,25 @@ async def check_scheduled():
 
 
 @tasks.loop(hours=168)
-    # Logar mensagens para ranking (ignorar bots)
+async def weekly_ranking():
     if not _bot_instance: return
+    # Importação tardia para evitar circularidade e garantir acesso ao config
+    from config import RANKING_CHANNEL, xp_data
     for guild in _bot_instance.guilds:
-        # Apenas processar se existirem canais de ranking
-        pass
-        from config import xp_data
+        ch = discord.utils.get(guild.channels, name=RANKING_CHANNEL)
+        if not ch: continue
+        
         users = sorted(xp_data.get(str(guild.id),{}).items(),
                        key=lambda x: x[1].get("messages",0), reverse=True)[:10]
         if not users: continue
+        
         medals = ["🥇","🥈","🥉"]+["🏅"]*7
-        lines  = [f"{medals[i]} **{(guild.get_member(int(uid)) or type('_',(),{'display_name':f'ID {uid}'})).display_name}** — {d.get('messages',0)} msgs"
-                  for i,(uid,d) in enumerate(users)]
+        lines = []
+        for i, (uid, d) in enumerate(users):
+            member = guild.get_member(int(uid))
+            name = member.display_name if member else f"Usuário {uid}"
+            lines.append(f"{medals[i]} **{name}** — {d.get('messages',0)} msgs")
+        
         await ch.send(embed=discord.Embed(
             title="🏆 Ranking Semanal — Gato Comics",
             description="\n".join(lines), color=0xFF6B9D, timestamp=datetime.datetime.utcnow()

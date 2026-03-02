@@ -229,20 +229,20 @@ def setup_commands(tree: app_commands.CommandTree, bot):
                         "id": "1", "type": 1, "title": "Você é...?",
                         "single_select": True, "required": True, "in_onboarding": True,
                         "options": [
-                            {"id": "101", "title": "📖 Leitor de Webtoons",    "role_ids": [str(cr["📖 Leitor"].id)]},
-                            {"id": "102", "title": "🎨 Artista / Criador",     "role_ids": [str(cr["🎨 Criador Parceiro"].id)]},
-                            {"id": "103", "title": "✍️ Escritor / Roteirista", "role_ids": [str(cr["✍️ Escritor Parceiro"].id)]},
-                            {"id": "104", "title": "👀 Só explorando",         "role_ids": [str(cr["🆕 Novato"].id)]},
+                            {"id": "101", "title": "📖 Leitor de Webtoons",    "role_ids": [str(cr["📖 Leitor"].id)] if "📖 Leitor" in cr else []},
+                            {"id": "102", "title": "🎨 Artista / Criador",     "role_ids": [str(cr["🎨 Criador Parceiro"].id)] if "🎨 Criador Parceiro" in cr else []},
+                            {"id": "103", "title": "✍️ Escritor / Roteirista", "role_ids": [str(cr["✍️ Escritor Parceiro"].id)] if "✍️ Escritor Parceiro" in cr else []},
+                            {"id": "104", "title": "👀 Só explorando",         "role_ids": [str(cr["🆕 Novato"].id)] if "🆕 Novato" in cr else []},
                         ]
                     },
                     {
                         "id": "2", "type": 1, "title": "Quais gêneros te interessam?",
                         "single_select": False, "required": False, "in_onboarding": True,
                         "options": [
-                            {"id": "201", "title": "⚔️ Ação",    "role_ids": [str(cr["⚔️ Fã de Ação"].id)]},
-                            {"id": "202", "title": "💕 Romance",  "role_ids": [str(cr["💕 Fã de Romance"].id)]},
-                            {"id": "203", "title": "👻 Terror",   "role_ids": [str(cr["👻 Fã de Terror"].id)]},
-                            {"id": "204", "title": "😂 Comédia",  "role_ids": [str(cr["😂 Fã de Comédia"].id)]},
+                            {"id": "201", "title": "⚔️ Ação",    "role_ids": [str(cr["⚔️ Fã de Ação"].id)] if "⚔️ Fã de Ação" in cr else []},
+                            {"id": "202", "title": "💕 Romance",  "role_ids": [str(cr["💕 Fã de Romance"].id)] if "💕 Fã de Romance" in cr else []},
+                            {"id": "203", "title": "👻 Terror",   "role_ids": [str(cr["👻 Fã de Terror"].id)] if "👻 Fã de Terror" in cr else []},
+                            {"id": "204", "title": "😂 Comédia",  "role_ids": [str(cr["😂 Fã de Comédia"].id)] if "😂 Fã de Comédia" in cr else []},
                         ]
                     },
                     {
@@ -254,18 +254,21 @@ def setup_commands(tree: app_commands.CommandTree, bot):
                             {"id": "303", "title": "👥 Indicação de amigo",  "role_ids": []},
                             {"id": "304", "title": "🌐 Outro",               "role_ids": []},
                         ]
-                    },
+                    }
                 ],
-                "default_channel_ids": [str(rules_ch.id), str(updates_ch.id)],
                 "enabled": True, "mode": 1
             }
-            async with aiohttp.ClientSession() as session:
-                async with session.put(
-                    f"https://discord.com/api/v10/guilds/{guild.id}/onboarding",
-                    headers={"Authorization": f"Bot {TOKEN}", "Content-Type": "application/json"},
-                    json=onboarding
-                ) as resp:
-                    logs.append("Onboarding configurado!" if resp.status == 200 else f"Onboarding: erro {resp.status}")
+            if rules_ch and updates_ch:
+                onboarding["default_channel_ids"] = [str(rules_ch.id), str(updates_ch.id)]
+                async with aiohttp.ClientSession() as session:
+                    async with session.put(
+                        f"https://discord.com/api/v10/guilds/{guild.id}/onboarding",
+                        headers={"Authorization": f"Bot {TOKEN}", "Content-Type": "application/json"},
+                        json=onboarding
+                    ) as resp:
+                        logs.append("Onboarding configurado!" if resp.status == 200 else f"Onboarding: erro {resp.status}")
+            else:
+                logs.append("Onboarding: canais não encontrados.")
         except Exception as e:
             logs.append(f"Onboarding: {str(e)[:50]}")
 
