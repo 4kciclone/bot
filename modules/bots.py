@@ -11,7 +11,7 @@ class BotPanel(discord.ui.View):
         self.add_item(discord.ui.Button(
             label="Música (Jockie Music)", 
             style=discord.ButtonStyle.link, 
-            url="https://discord.com/oauth2/authorize?client_id=412153375836962828&permissions=8&scope=bot",
+            url="https://jockiemusic.com/",
             emoji="🎵"
         ))
 
@@ -19,7 +19,7 @@ class BotPanel(discord.ui.View):
         self.add_item(discord.ui.Button(
             label="Gacha (Mudae)", 
             style=discord.ButtonStyle.link, 
-            url="https://discord.com/oauth2/authorize?client_id=432610292342587392&permissions=8&scope=bot",
+            url="https://top.gg/bot/432610292342587392",
             emoji="🎮"
         ))
 
@@ -27,7 +27,7 @@ class BotPanel(discord.ui.View):
         self.add_item(discord.ui.Button(
             label="Artes IA (Niji Journey)", 
             style=discord.ButtonStyle.link, 
-            url="https://discord.com/oauth2/authorize?client_id=1022952195194425444&permissions=8&scope=bot",
+            url="https://nijijourney.com/pt-BR/",
             emoji="🎨"
         ))
 
