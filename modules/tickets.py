@@ -1,137 +1,124 @@
 import discord
-from discord import app_commands
-import datetime
-import asyncio
-from config import *
+from discord.ext import commands
 
-async def send_ticket_panel(channel: discord.TextChannel):
-    embed = discord.Embed(
-        title="🎫 Central de Suporte — Gato Comics",
-        description="Selecione a categoria do seu problema abaixo.\nUm canal privado será aberto só para você e nossa equipe. 🐱",
-        color=0xFF6B9D
-    )
-    embed.set_footer(text="Apenas você e a equipe verão seu ticket.")
-    await channel.send(embed=embed, view=TicketCategoryView())
-
-
-class TicketCategoryView(discord.ui.View):
+class TicketDropdown(discord.ui.Select):
     def __init__(self):
-        super().__init__(timeout=None)
-        self.add_item(TicketCategorySelect())
-
-
-class TicketCategorySelect(discord.ui.Select):
-    def __init__(self):
-        super().__init__(
-            placeholder="Selecione o tipo de suporte...",
-            custom_id="ticket_category",
-            options=[
-                discord.SelectOption(label="Problema de Leitura", emoji="📖", value="leitura",   description="Erro ao ler um webtoon"),
-                discord.SelectOption(label="Dúvida sobre Obra",   emoji="📚", value="obra",      description="Perguntas sobre algum título"),
-                discord.SelectOption(label="Pagamento",           emoji="💳", value="pagamento", description="Problema com assinatura ou compra"),
-                discord.SelectOption(label="Bug Técnico",         emoji="🐛", value="bug",       description="Erro técnico na plataforma"),
-                discord.SelectOption(label="Quero ser Parceiro",  emoji="🤝", value="parceria",  description="Interesse em publicar na Gato Comics"),
-                discord.SelectOption(label="Outros",              emoji="❓", value="outros",    description="Qualquer outro assunto"),
-            ]
-        )
+        options = [
+            discord.SelectOption(label='Problema de Leitura', description='Páginas não carregam ou erro no app', emoji='📖'),
+            discord.SelectOption(label='Problema no Pagamento', description='Moedas não caíram ou erro no cartão', emoji='💳'),
+            discord.SelectOption(label='Bug no Site', description='Encontrei um erro visual ou de sistema', emoji='🐛'),
+            discord.SelectOption(label='Dúvidas Gerais', description='Quero falar com um membro da equipe', emoji='❓')
+        ]
+        # Custom_id garante que o bot lembre do dropdown se reiniciar
+        super().__init__(placeholder='Escolha o departamento adequado...', min_values=1, max_values=1, options=options, custom_id='ticket_dropdown')
 
     async def callback(self, interaction: discord.Interaction):
-        cat_map = {
-            "leitura":   ("📖 Leitura",   "Descreva qual webtoon e qual o problema ao ler."),
-            "obra":      ("📚 Obra",      "Qual o título da obra e sua dúvida?"),
-            "pagamento": ("💳 Pagamento", "Descreva o problema com pagamento ou assinatura."),
-            "bug":       ("🐛 Bug",       "Descreva o erro (dispositivo, versão, etc)."),
-            "parceria":  ("🤝 Parceria",  "Conte sobre você e seu projeto!"),
-            "outros":    ("❓ Outros",    "Descreva sua dúvida ou solicitação."),
-        }
-        cat_name, first_msg = cat_map[self.values[0]]
         guild = interaction.guild
-        user  = interaction.user
-        slug  = user.name.lower().replace(' ', '-')[:20]
-        ticket_name = f"ticket-{slug}"
+        member = interaction.user
+        category = discord.utils.get(guild.categories, name="🎟️ TICKETS")
+        
+        if not category:
+            # Tenta criar a categoria se alguém apagou
+            try:
+                category = await guild.create_category("🎟️ TICKETS")
+            except:
+                return await interaction.response.send_message("❌ Erro: Não encontrei a categoria de Tickets. Avise a Staff.", ephemeral=True)
 
-        existing = discord.utils.get(guild.channels, name=ticket_name)
-        if existing:
-            await interaction.response.send_message(f"❌ Você já tem um ticket: {existing.mention}", ephemeral=True)
-            return
+        # Verifica se o usuário já tem um ticket aberto
+        for channel in category.channels:
+            if f"ticket-{member.name}".lower() in channel.name.lower():
+                return await interaction.response.send_message("⚠️ Você já tem um ticket aberto nesta categoria.", ephemeral=True)
 
-        cat = discord.utils.get(guild.categories, name=TICKET_CATEGORY) or await guild.create_category(TICKET_CATEGORY)
-        support = [r for r in guild.roles if r.name in SUPPORT_ROLE_NAMES]
+        # Configura as permissões do novo canal
         overwrites = {
-            guild.default_role: discord.PermissionOverwrite(view_channel=False),
-            user: discord.PermissionOverwrite(view_channel=True, send_messages=True, attach_files=True),
+            guild.default_role: discord.PermissionOverwrite(read_messages=False),
+            member: discord.PermissionOverwrite(read_messages=True, send_messages=True, attach_files=True),
         }
-        for r in support:
-            overwrites[r] = discord.PermissionOverwrite(view_channel=True, send_messages=True, manage_messages=True)
+        
+        # Admin e Fundador
+        admin_roles = ["👑 Fundador / Sócio", "👑 Administrador", "🎧 Equipe de Suporte"]
+        for role_name in admin_roles:
+            role = discord.utils.get(guild.roles, name=role_name)
+            if role:
+                 overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
 
-        ch = await guild.create_text_channel(
-            ticket_name, category=cat, overwrites=overwrites,
-            topic=f"{cat_name} | {user.name} | {datetime.datetime.now().strftime('%d/%m/%Y %H:%M')}"
-        )
+        # Cria o canal
+        try:
+            ticket_channel = await guild.create_text_channel(
+                f"ticket-{member.name}",
+                category=category,
+                overwrites=overwrites
+            )
+        except Exception as e:
+            return await interaction.response.send_message(f"❌ Erro ao criar o canal: {e}", ephemeral=True)
 
+        # Responder ao usuário (ephemeral = só ele vê)
+        await interaction.response.send_message(f"✅ Ticket criado em {ticket_channel.mention}!", ephemeral=True)
+
+        # Enviar mensagem dentro do novo canal
         embed = discord.Embed(
-            title=f"🎫 Ticket — {cat_name}",
-            description=f"Olá {user.mention}! 👋\n\n**{first_msg}**\n\nNossa equipe responderá em breve.\nQuando resolvido, clique em **🔒 Fechar Ticket**.",
-            color=0xFF6B9D, timestamp=datetime.datetime.utcnow()
+            title=f"Ticket: {self.values[0]}",
+            description=(
+                f"Olá {member.mention}! Nossa equipe já foi notificada e em breve fará o atendimento.\n\n"
+                "Descreva seu problema com o máximo de detalhes possível, anexe prints se puder.\n\n"
+                "Para encerrar o atendimento, clique no botão abaixo."
+            ),
+            color=discord.Color.gold()
         )
-        embed.set_footer(text="Gato Comics Support 🐱")
-        mentions = " ".join(r.mention for r in support)
-        await ch.send(content=f"{user.mention} {mentions}", embed=embed, view=TicketCloseView())
-        await interaction.response.send_message(f"✅ Ticket aberto: {ch.mention}", ephemeral=True)
-
-        # Atualizar stats
-        await update_ticket_stats(guild, 1)
+        
+        view = CloseTicketView()
+        await ticket_channel.send(embed=embed, view=view)
 
 
-class TicketCloseView(discord.ui.View):
+class CloseTicketView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="🔒 Fechar Ticket", style=discord.ButtonStyle.danger, custom_id="close_ticket")
-    async def close_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
-        ch    = interaction.channel
-        guild = interaction.guild
-        support  = [r for r in interaction.user.roles if r.name in SUPPORT_ROLE_NAMES]
-        is_owner = ch.name.endswith(interaction.user.name.lower().replace(' ', '-')[:20])
-        if not support and not is_owner:
-            await interaction.response.send_message("❌ Sem permissão.", ephemeral=True)
-            return
-
-        await interaction.response.send_message("🔒 Fechando em 5 segundos...")
-        log_ch = discord.utils.get(guild.channels, name=LOG_CHANNEL)
-        if log_ch:
-            msgs = [
-                f"[{m.created_at.strftime('%d/%m %H:%M')}] {m.author.display_name}: {m.content}"
-                async for m in ch.history(limit=200, oldest_first=True) if not m.author.bot
-            ]
-            embed = discord.Embed(
-                title=f"📋 Ticket Fechado — #{ch.name}",
-                description=f"Fechado por: {interaction.user.mention}\n\n**Log:**\n```\n" + "\n".join(msgs[-30:]) + "\n```",
-                color=discord.Color.red(), timestamp=datetime.datetime.utcnow()
-            )
-            await log_ch.send(embed=embed)
-
-        await asyncio.sleep(5)
-        await ch.delete()
-        await update_ticket_stats(guild, -1)
+    @discord.ui.button(label="Fechar Ticket", style=discord.ButtonStyle.danger, emoji="🔒", custom_id="close_ticket_btn")
+    async def close_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_message("O ticket será fechado e deletado em 5 segundos...")
+        await discord.utils.sleep_until(discord.utils.utcnow() + discord.utils.timedelta(seconds=5))
+        try:
+            await interaction.channel.delete()
+        except:
+            pass
 
 
-async def update_ticket_stats(guild: discord.Guild, delta: int):
-    """Atualiza o canal de estatísticas de tickets."""
-    for ch in guild.voice_channels:
-        if ch.name.startswith("🎫 Tickets:"):
-            try:
-                current = int(ch.name.split(": ")[1])
-                await ch.edit(name=f"🎫 Tickets: {max(0, current + delta)}")
-            except:
-                pass
-            break
+class TicketSystemView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+        self.add_item(TicketDropdown())
 
 
-def setup_commands(tree: app_commands.CommandTree, bot):
+class Tickets(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
 
-    @tree.command(name="ticketpainel", description="📩 Reenvia o painel de tickets")
-    @app_commands.checks.has_permissions(manage_channels=True)
-    async def ticket_panel_cmd(interaction: discord.Interaction):
-        await send_ticket_panel(interaction.channel)
-        await interaction.response.send_message("✅ Painel enviado!", ephemeral=True)
+    @commands.command(name='setup_tickets', help='[Admin] Instancia o painel de tickets de suporte dinâmico no canal atual.')
+    @commands.has_permissions(administrator=True)
+    async def setup_tickets(self, ctx):
+        # Limpa o chat para deixar o painel limpo
+        try:
+           await ctx.channel.purge(limit=2) 
+        except:
+            pass
+
+        embed = discord.Embed(
+            title="📞 Central de Atendimento - Gato Comics",
+            description=(
+                "Precisa de ajuda com o aplicativo, pagamento de moedas ou quer reportar um bug?\n\n"
+                "Selecione o departamento adequado no menu abaixo e **um canal privado** "
+                "será aberto imediatamente para conversarmos com você."
+            ),
+            color=discord.Color.blue()
+        )
+        # Tenta pegar a logo do bot pro embed ficar mais rico
+        if self.bot.user.display_avatar:
+             embed.set_thumbnail(url=self.bot.user.display_avatar.url)
+             
+        # Envia o Embed + View com Dropdown
+        await ctx.send(embed=embed, view=TicketSystemView())
+
+
+async def setup(bot):
+    await bot.add_cog(Tickets(bot))

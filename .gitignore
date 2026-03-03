@@ -1,1 +1,17 @@
+# Ambientes
 .env
+
+# Banco de dados SQLite do Bot
+*.db
+*.sqlite3
+
+# Python / Bytecode
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Diretórios virtuais
+venv/
+env/
+.venv/

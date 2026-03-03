@@ -1,304 +1,176 @@
 import discord
-from discord import app_commands
-from discord.ext import tasks
+from discord.ext import commands
+import aiosqlite
+import random
+import time
 import datetime
-import asyncio
-from config import *
-from config import COMMANDS_CHANNEL, RANKING_CHANNEL
 
-spam_tracker  = {}  # {guild_id: {user_id: [timestamps]}}
-streak_data   = {}  # {guild_id: {user_id: {last_seen, streak}}}
-missions_data = {}  # {guild_id: {user_id: {date, tasks_done}}}
+# Base de XP para subir de nível: Nível * 100
+# Ex: Nível 1 -> 2 = 100 XP / Nível 2 -> 3 = 200 XP
+def next_level_xp(level):
+    return level * 100
 
-DAILY_MISSIONS = [
-    {"id": "msg10",   "desc": "📝 Envie 10 mensagens",           "req": 10,  "type": "messages", "xp": 50},
-    {"id": "msg25",   "desc": "📝 Envie 25 mensagens",           "req": 25,  "type": "messages", "xp": 100},
-    {"id": "react5",  "desc": "❤️ Reaja a 5 mensagens",          "req": 5,   "type": "reactions","xp": 30},
-]
-
-
-def get_streak(gid, uid):
-    return streak_data.get(str(gid), {}).get(str(uid), {"last_seen": None, "streak": 0})
-
-def set_streak(gid, uid, data):
-    g, u = str(gid), str(uid)
-    if g not in streak_data: streak_data[g] = {}
-    streak_data[g][u] = data
-
-def update_streak(gid, uid):
-    """Atualiza streak diário. Retorna (streak_atual, is_new_day)."""
-    data  = get_streak(gid, uid)
-    today = datetime.date.today().isoformat()
-    if data["last_seen"] == today:
-        return data["streak"], False
-    yesterday = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
-    if data["last_seen"] == yesterday:
-        data["streak"] += 1
-    else:
-        data["streak"] = 1
-    data["last_seen"] = today
-    set_streak(gid, uid, data)
-    return data["streak"], True
-
-
-async def process_message(message, bot):
-    """Processa XP, streak, anti-spam e missões. Chamado pelo on_message de bot.py."""
-    if message.author.bot or not message.guild:
-        return
-
-    gid = message.guild.id
-    uid = message.author.id
-    now = datetime.datetime.utcnow().timestamp()
-
-    # Anti-spam
-    key = f"{gid}:{uid}"
-    if key not in spam_tracker: spam_tracker[key] = []
-    spam_tracker[key] = [t for t in spam_tracker[key] if now - t < SPAM_SECONDS]
-    spam_tracker[key].append(now)
-    if len(spam_tracker[key]) >= SPAM_LIMIT:
-        try:
-            until = discord.utils.utcnow() + datetime.timedelta(minutes=5)
-            await message.author.timeout(until, reason="Auto-mute: spam detectado")
-            await message.channel.send(
-                f"⚠️ {message.author.mention} foi silenciado por **5 minutos** por spam.",
-                delete_after=10
-            )
-            spam_tracker[key] = []
-        except: pass
-        return
-
-    # Anti-link (só permite links para Leitor+)
-    leitor_role = discord.utils.get(message.guild.roles, name="📖 Leitor")
-    if leitor_role and leitor_role not in message.author.roles:
-        if "http://" in message.content or "https://" in message.content:
-            try:
-                await message.delete()
-                await message.channel.send(
-                    f"🔗 {message.author.mention} você precisa ser **Leitor** para enviar links!",
-                    delete_after=5
+class XP(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+        self.db_path = "gato_comics.db"
+        
+    async def cog_load(self):
+        # Cria a tabela de XP se não existir
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute('''
+                CREATE TABLE IF NOT EXISTS users (
+                    user_id INTEGER PRIMARY KEY,
+                    xp INTEGER DEFAULT 0,
+                    level INTEGER DEFAULT 1,
+                    last_message_time REAL DEFAULT 0,
+                    last_daily_date TEXT DEFAULT ''
                 )
-            except: pass
+            ''')
+            await db.commit()
+
+    async def get_user(self, user_id):
+        # Retorna os dados do usuário ou cria um novo na tabela
+        async with aiosqlite.connect(self.db_path) as db:
+            async with db.execute('SELECT xp, level, last_message_time, last_daily_date FROM users WHERE user_id = ?', (user_id,)) as cursor:
+                result = await cursor.fetchone()
+                if not result:
+                    await db.execute('INSERT INTO users (user_id) VALUES (?)', (user_id,))
+                    await db.commit()
+                    return 0, 1, 0.0, ""
+                return result
+
+    async def update_user(self, user_id, xp, level, last_message_time, last_daily_date):
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute('''
+                UPDATE users 
+                SET xp = ?, level = ?, last_message_time = ?, last_daily_date = ?
+                WHERE user_id = ?
+            ''', (xp, level, last_message_time, last_daily_date, user_id))
+            await db.commit()
+
+    @commands.Cog.listener()
+    async def on_message(self, message):
+        if message.author.bot or not message.guild:
             return
 
-    # XP
-    data = get_xp(gid, uid)
-    data["xp"]       = data.get("xp", 0) + XP_PER_MESSAGE
-    data["messages"] = data.get("messages", 0) + 1
-    data["total_xp"] = data.get("total_xp", 0) + XP_PER_MESSAGE
-    data["level"]    = data.get("level", 1)
+        user_id = message.author.id
+        xp, level, last_msg_time, last_daily = await self.get_user(user_id)
 
-    # Streak
-    streak, is_new_day = update_streak(gid, uid)
-    if is_new_day and streak > 1:
-        bonus = streak * 10
-        data["xp"]       += bonus
-        data["total_xp"] += bonus
+        now = time.time()
+        # Cooldown de 60 segundos por mensagem para ganhar XP
+        if now - last_msg_time > 60:
+            xp_ganho = random.randint(15, 25)
+            novo_xp = xp + xp_ganho
+            novo_lvl = level
 
-    # Level up
-    if data["xp"] >= xp_needed(data["level"]):
-        data["level"] += 1
-        data["xp"]     = 0
-        set_xp(gid, uid, data)
-        await handle_level_up(message.guild, message.author, data["level"], streak)
-    else:
-        set_xp(gid, uid, data)
+            xp_necessario = next_level_xp(level)
 
-    # Missões — contar mensagens do dia (não total)
-    today = datetime.date.today().isoformat()
-    g_str, u_str = str(gid), str(uid)
-    if g_str not in missions_data: missions_data[g_str] = {}
-    if u_str not in missions_data[g_str]: missions_data[g_str][u_str] = {"date": today, "done": [], "daily_msgs": 0}
-    if missions_data[g_str][u_str].get("date") != today:
-        missions_data[g_str][u_str] = {"date": today, "done": [], "daily_msgs": 0}
-    missions_data[g_str][u_str]["daily_msgs"] = missions_data[g_str][u_str].get("daily_msgs", 0) + 1
+            if novo_xp >= xp_necessario:
+                novo_xp -= xp_necessario
+                novo_lvl += 1
+                
+                # Envia mensagem de Level Up
+                channel = message.channel
+                await channel.send(f"🎉 Parabéns {message.author.mention}! Você subiu para o **Nível {novo_lvl}**! 🚀")
 
-    await check_missions(message.guild, message.author, "messages")
+                # RECOMPENSAS DE CARGOS VIP
+                # Verifica se o membro atingiu os níveis de premiação e dá o cargo, se existir.
+                rewards = {
+                    5: "🌟 Super Fã (VIP)",
+                    10: "🎨 Artista Parceiro" 
+                }
+                if novo_lvl in rewards:
+                    role_name = rewards[novo_lvl]
+                    role = discord.utils.get(message.guild.roles, name=role_name)
+                    if role:
+                        try:
+                            await message.author.add_roles(role, reason="Recompensa de Nível")
+                            await channel.send(f"🎁 Incrível! Por atingir o Nível {novo_lvl}, você desbloqueou o cargo **{role_name}**!")
+                        except:
+                            pass # Bot sem permissão ou cargo acima dele na hierarquia
 
+            await self.update_user(user_id, novo_xp, novo_lvl, now, last_daily)
 
+    @commands.command(name='rank', aliases=['nivel', 'level'], help='Mostra o seu Nível e XP atual.')
+    async def rank(self, ctx, member: discord.Member = None):
+        member = member or ctx.author
+        if member.bot:
+            return await ctx.send("🤖 Bots não possuem XP, eles já sabem tudo!")
 
+        xp, level, _, _ = await self.get_user(member.id)
+        xp_necessario = next_level_xp(level)
 
+        embed = discord.Embed(title=f"💳 Perfil de Gato Comics", color=member.color or discord.Color.blue())
+        embed.set_thumbnail(url=member.display_avatar.url if member.display_avatar else None)
+        embed.add_field(name="Usuário", value=member.mention, inline=False)
+        embed.add_field(name="🏆 Nível", value=f"**{level}**", inline=True)
+        embed.add_field(name="✨ XP Atual", value=f"{xp} / {xp_necessario}", inline=True)
 
-async def handle_level_up(guild, member, level, streak):
-    ch = discord.utils.get(guild.channels, name=CONQUEST_CHANNEL)
-    if ch:
-        streak_txt = f" | 🔥 Streak: {streak} dias!" if streak > 1 else ""
-        embed = discord.Embed(
-            title="🎉 Subiu de Nível!",
-            description=f"{member.mention} chegou ao **nível {level}**! 🚀{streak_txt}",
-            color=0xFF6B9D
-        )
-        await ch.send(embed=embed)
-    if level in LEVEL_ROLES:
-        role = discord.utils.get(guild.roles, name=LEVEL_ROLES[level])
-        if role and role not in member.roles:
-            await member.add_roles(role)
+        # Calculo rudimentar da barra de progresso
+        progress = int((xp / xp_necessario) * 10)
+        barra = ("🟩" * progress) + ("🔲" * (10 - progress))
+        embed.add_field(name="Progresso", value=barra, inline=False)
 
+        await ctx.send(embed=embed)
 
-async def check_missions(guild, member, action_type):
-    gid   = str(guild.id)
-    uid   = str(member.id)
-    today = datetime.date.today().isoformat()
-    if gid not in missions_data: missions_data[gid] = {}
-    if uid not in missions_data[gid]: missions_data[gid][uid] = {"date": today, "done": [], "daily_msgs": 0}
-    if missions_data[gid][uid].get("date") != today:
-        missions_data[gid][uid] = {"date": today, "done": [], "daily_msgs": 0}
+    @commands.command(name='daily', help='Ganha uma recompensa de XP diária.')
+    async def daily(self, ctx):
+        user_id = ctx.author.id
+        xp, level, last_msg_time, last_daily = await self.get_user(user_id)
 
-    user_day = missions_data[gid][uid]
-    data = get_xp(gid, uid)
-    for m in DAILY_MISSIONS:
-        if m["id"] in user_day["done"]: continue
-        if m["type"] != action_type: continue
-        # Usar mensagens do dia, não total
-        val = user_day.get("daily_msgs", 0) if action_type == "messages" else 0
-        if val >= m["req"]:
-            user_day["done"].append(m["id"])
-            data["xp"]       = data.get("xp", 0) + m["xp"]
-            data["total_xp"] = data.get("total_xp", 0) + m["xp"]
-            set_xp(gid, uid, data)
-            ch = discord.utils.get(guild.channels, name=CONQUEST_CHANNEL)
-            if ch:
-                await ch.send(embed=discord.Embed(
-                    description=f"✅ {member.mention} completou a missão **{m['desc']}** e ganhou **+{m['xp']} XP**!",
-                    color=0xFF6B9D
-                ))
+        # Usar data UTC para padronizar (YYYY-MM-DD)
+        hoje = datetime.datetime.utcnow().strftime('%Y-%m-%d')
 
+        if last_daily == hoje:
+            return await ctx.send(f"⏳ Calma lá, {ctx.author.mention}! Você já pegou sua recompensa de Missão Diária hoje. Volte amanhã!")
 
+        # Ganha um bonus parrudo de XP
+        xp_bonus = random.randint(100, 200)
+        novo_xp = xp + xp_bonus
+        novo_lvl = level
+        xp_necessario = next_level_xp(level)
 
-def setup_commands(tree: app_commands.CommandTree, bot):
+        msg_extra = ""
+        # Verifica level up por daily
+        if novo_xp >= xp_necessario:
+            novo_xp -= xp_necessario
+            novo_lvl += 1
+            msg_extra = f"\n🎉 Uau! Esse bônus fez você subir para o **Nível {novo_lvl}**!"
 
-    @tree.command(name="rank", description="📊 Seu nível e XP")
-    @channel_only(COMMANDS_CHANNEL)
-    @app_commands.checks.cooldown(1, 60, key=lambda i: i.user.id)
-    async def rank(interaction: discord.Interaction):
-        data   = get_xp(interaction.guild.id, interaction.user.id)
-        level  = data.get("level", 1)
-        xp     = data.get("xp", 0)
-        needed = xp_needed(level)
-        filled = int((xp / needed) * 20)
-        bar    = "█" * filled + "░" * (20 - filled)
-        streak = get_streak(interaction.guild.id, interaction.user.id)["streak"]
-
-        embed = discord.Embed(
-            title=f"📊 Rank de {interaction.user.display_name}",
-            description=(
-                f"**Nível:** {level}\n"
-                f"**XP:** {xp}/{needed}\n"
-                f"`{bar}` {int((xp/needed)*100)}%\n"
-                f"**Total XP:** {data.get('total_xp',0)}\n"
-                f"**Mensagens:** {data.get('messages',0)}\n"
-                f"**🔥 Streak:** {streak} dias"
-            ),
-            color=0xFF6B9D
-        )
-        embed.set_thumbnail(url=interaction.user.display_avatar.url)
-        await interaction.response.send_message(embed=embed)
-
-
-    @tree.command(name="top", description="🏆 Top membros mais ativos")
-    @channel_only(RANKING_CHANNEL)
-    async def top(interaction: discord.Interaction):
-        users = sorted(
-            xp_data.get(str(interaction.guild.id), {}).items(),
-            key=lambda x: (x[1].get("level",1), x[1].get("xp",0)),
-            reverse=True
-        )[:10]
-        medals = ["🥇","🥈","🥉"] + ["🏅"] * 7
-        lines  = []
-        for n, (uid, d) in enumerate(users):
-            m = interaction.guild.get_member(int(uid))
-            name = m.display_name if m else f"ID {uid}"
-            lines.append(f"{medals[n]} **{name}** — Nível {d.get('level',1)} ({d.get('messages',0)} msgs)")
-        await interaction.response.send_message(embed=discord.Embed(
-            title="🏆 Top 10 Membros",
-            description="\n".join(lines) or "Sem dados ainda.",
-            color=0xFF6B9D
-        ))
-
-
-    @tree.command(name="missoes", description="📋 Veja suas missões diárias")
-    @channel_only(COMMANDS_CHANNEL)
-    async def missoes(interaction: discord.Interaction):
-        gid   = str(interaction.guild.id)
-        uid   = str(interaction.user.id)
-        today = datetime.date.today().isoformat()
-        done  = missions_data.get(gid, {}).get(uid, {}).get("done", []) if missions_data.get(gid, {}).get(uid, {}).get("date") == today else []
-        data  = get_xp(gid, uid)
-
-        lines = []
-        for m in DAILY_MISSIONS:
-            status = "✅" if m["id"] in done else "⏳"
-            prog   = data.get("messages", 0) if m["type"] == "messages" else 0
-            lines.append(f"{status} {m['desc']} — `{min(prog, m['req'])}/{m['req']}` (+{m['xp']} XP)")
+        await self.update_user(user_id, novo_xp, novo_lvl, last_msg_time, hoje)
 
         embed = discord.Embed(
-            title=f"📋 Missões Diárias de {interaction.user.display_name}",
-            description="\n".join(lines),
-            color=0xFF6B9D
+            title="🎯 Missão Diária Concluída!", 
+            description=f"Você acessou a comunidade hoje e encontrou **{xp_bonus} XP**! 🌟{msg_extra}", 
+            color=discord.Color.green()
         )
-        embed.set_footer(text="Missões reiniciam à meia-noite!")
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        await ctx.send(embed=embed)
 
+    @commands.command(name='top', aliases=['leaderboard'], help='Mostra os 10 membros com mais level no servidor.')
+    async def top(self, ctx):
+        async with aiosqlite.connect(self.db_path) as db:
+            # Pega os Top 10 baseados no nível e depois pelo XP
+            async with db.execute('SELECT user_id, xp, level FROM users ORDER BY level DESC, xp DESC LIMIT 10') as cursor:
+                top_users = await cursor.fetchall()
 
-    @tree.command(name="streak", description="🔥 Veja seu streak de presença")
-    @channel_only(COMMANDS_CHANNEL)
-    async def streak_cmd(interaction: discord.Interaction):
-        s = get_streak(interaction.guild.id, interaction.user.id)
-        await interaction.response.send_message(embed=discord.Embed(
-            description=f"🔥 Seu streak atual: **{s['streak']} dias consecutivos**!\nÚltimo acesso: {s['last_seen'] or 'Nunca'}",
-            color=0xFF6B9D
-        ), ephemeral=True)
+        if not top_users:
+            return await ctx.send("Ninguém ganhou XP ainda no servidor!")
 
+        embed = discord.Embed(title="🏆 Rank de Leitores - Gato Comics", color=discord.Color.gold())
+        
+        desc = ""
+        for i, (uid, xp, level) in enumerate(top_users, start=1):
+            member = ctx.guild.get_member(uid)
+            nome = member.display_name if member else f"Usuário Desconhecido"
+            
+            medals = {1: "🥇", 2: "🥈", 3: "🥉"}
+            prefix = medals.get(i, f"**{i}º**")
+            
+            desc += f"{prefix} **{nome}** — Nível `{level}` *(XP: {xp})*\n"
 
-    @tree.command(name="loja", description="🛒 Loja de cargos com XP")
-    @channel_only(COMMANDS_CHANNEL)
-    async def loja(interaction: discord.Interaction):
-        data  = get_xp(interaction.guild.id, interaction.user.id)
-        total = data.get("total_xp", 0)
-        lines = [f"**{name}** — `{info['price']} XP`" for name, info in shop_items.items()]
-        embed = discord.Embed(
-            title="🛒 Loja de Cargos",
-            description="\n".join(lines) + f"\n\n💰 Seu XP total: **{total}**\nUse `/comprar [nome]` para adquirir!",
-            color=0xFF6B9D
-        )
-        await interaction.response.send_message(embed=embed)
+        embed.description = desc
+        await ctx.send(embed=embed)
 
-
-    @tree.command(name="comprar", description="💳 Compra um cargo da loja")
-    @channel_only(COMMANDS_CHANNEL)
-    async def comprar(interaction: discord.Interaction, item: str):
-        if item not in shop_items:
-            await interaction.response.send_message("❌ Item não encontrado. Use `/loja` para ver os itens.", ephemeral=True)
-            return
-        info  = shop_items[item]
-        data  = get_xp(interaction.guild.id, interaction.user.id)
-        total = data.get("total_xp", 0)
-        if total < info["price"]:
-            await interaction.response.send_message(f"❌ XP insuficiente! Você tem **{total}** e precisa de **{info['price']}**.", ephemeral=True)
-            return
-        role = discord.utils.get(interaction.guild.roles, name=info["role"])
-        if not role:
-            await interaction.response.send_message("❌ Cargo não encontrado no servidor.", ephemeral=True)
-            return
-        if role in interaction.user.roles:
-            await interaction.response.send_message("✅ Você já tem este cargo!", ephemeral=True)
-            return
-        data["total_xp"] -= info["price"]
-        set_xp(interaction.guild.id, interaction.user.id, data)
-        await interaction.user.add_roles(role)
-        await interaction.response.send_message(f"🎉 Você comprou **{item}** por **{info['price']} XP**!", ephemeral=True)
-
-
-    @tree.command(name="darxp", description="🎁 Transfere XP para outro membro")
-    @channel_only(COMMANDS_CHANNEL)
-    async def darxp(interaction: discord.Interaction, membro: discord.Member, quantidade: int):
-        if quantidade <= 0:
-            await interaction.response.send_message("❌ Quantidade inválida.", ephemeral=True); return
-        data_from = get_xp(interaction.guild.id, interaction.user.id)
-        if data_from.get("total_xp", 0) < quantidade:
-            await interaction.response.send_message("❌ XP insuficiente.", ephemeral=True); return
-        data_from["total_xp"] -= quantidade
-        set_xp(interaction.guild.id, interaction.user.id, data_from)
-        data_to = get_xp(interaction.guild.id, membro.id)
-        data_to["total_xp"] = data_to.get("total_xp", 0) + quantidade
-        set_xp(interaction.guild.id, membro.id, data_to)
-        await interaction.response.send_message(f"🎁 Você enviou **{quantidade} XP** para {membro.mention}!")
+async def setup(bot):
+    await bot.add_cog(XP(bot))

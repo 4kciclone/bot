@@ -1,165 +1,52 @@
+import os
 import discord
 from discord.ext import commands
-from discord import app_commands
-import asyncio
-import datetime
-from config import TOKEN, WELCOME_CHANNEL, CONQUEST_CHANNEL, STATS_CATEGORY
+from dotenv import load_dotenv
 
-# ─────────────────────────────────────────
-#  Inicialização
-# ─────────────────────────────────────────
-intents = discord.Intents.all()
-bot     = commands.Bot(command_prefix="g!", intents=intents)
-tree    = bot.tree
+# Carrega as variáveis de ambiente baseadas no .env
+load_dotenv()
 
+# Configura as intenções do bot (necessário para gerenciar cargos/membros, etc)
+intents = discord.Intents.default()
+intents.message_content = True
+intents.members = True # Necessário para interagir com os membros do servidor
+intents.guilds = True  # Necessário para gerenciar canais e cargos
 
+from modules.tickets import TicketSystemView, CloseTicketView
 
-
-# ─────────────────────────────────────────
-#  Carregar módulos
-# ─────────────────────────────────────────
-from modules.setup      import setup_commands       as setup_setup
-from modules.tickets    import setup_commands       as setup_tickets, TicketCategoryView, TicketCloseView
-from modules.xp         import setup_commands       as setup_xp, process_message as xp_process_message
-from modules.moderation import setup_commands       as setup_moderation, on_message_ai
-from modules.ai         import setup_commands       as setup_ai
-from modules.events     import setup_commands       as setup_events, start_tasks
-from modules.profile    import setup_commands       as setup_profile
-
-setup_setup(tree, bot)
-setup_tickets(tree, bot)
-setup_xp(tree, bot)
-setup_moderation(tree, bot)
-setup_ai(tree, bot)
-setup_events(tree, bot)
-setup_profile(tree, bot)
-
-
-# ─────────────────────────────────────────
-#  Eventos globais
-# ─────────────────────────────────────────
-
-@bot.event
-async def on_ready():
-    bot.add_view(TicketCategoryView())
-    bot.add_view(TicketCloseView())
-
-    # Sincronização forçada para o servidor específico (muito mais rápido que global)
-    if GUILD_ID:
-        guild = discord.Object(id=GUILD_ID)
-        tree.copy_global_to(guild=guild)
-        await tree.sync(guild=guild)
-        print(f"📋 Comandos sincronizados para o servidor: {GUILD_ID}")
-    else:
-        await tree.sync()
-        print("📋 Comandos sincronizados globalmente")
-
-    await bot.change_presence(
-        activity=discord.Activity(type=discord.ActivityType.watching, name="🐱 Gato Comics")
-    )
-
-    # Iniciar tasks agendadas (só depois do event loop estar ativo)
-    start_tasks(bot)
-
-    print(f"✅ {bot.user} online! | {len(bot.guilds)} servidor(es)")
-
-
-@bot.command()
-@commands.is_owner()
-async def sync(ctx):
-    """Comando manual para forçar a sincronização de comandos slash"""
-    if GUILD_ID:
-        guild = discord.Object(id=GUILD_ID)
-        tree.copy_global_to(guild=guild)
-        await tree.sync(guild=guild)
-        await ctx.send(f"✅ Comandos sincronizados para o servidor {GUILD_ID}!")
-    else:
-        await tree.sync()
-        await ctx.send("✅ Comandos sincronizados globalmente!")
-
-
-@bot.event
-async def on_member_join(member: discord.Member):
-    guild  = member.guild
-    novato = discord.utils.get(guild.roles, name="🆕 Novato")
-    if novato:
-        await member.add_roles(novato)
-
-    # Atualizar estatísticas
-    for vc in guild.voice_channels:
-        if vc.name.startswith("👥 Membros:"):
-            try: await vc.edit(name=f"👥 Membros: {guild.member_count}")
-            except: pass
-
-    ch = discord.utils.get(guild.channels, name=WELCOME_CHANNEL)
-    if ch:
-        embed = discord.Embed(
-            title=f"🐱 Seja bem-vindo, {member.display_name}!",
-            description=(
-                f"Que ótimo ter você aqui, {member.mention}! 🎉\n\n"
-                "Complete o onboarding para ter acesso completo ao servidor.\n"
-                "Use `/perfil` para ver seu progresso e `/missoes` para missões diárias!"
-            ),
-            color=0xFF6B9D
+class GatoComicsBot(commands.Bot):
+    def __init__(self):
+        super().__init__(
+            command_prefix='!',
+            intents=intents,
+            help_command=commands.DefaultHelpCommand()
         )
-        embed.set_thumbnail(url=member.display_avatar.url)
-        await ch.send(embed=embed)
 
+    async def setup_hook(self):
+        # Registra as Views persistentes (Tickets) para que os botões funcionem após reiniciar
+        self.add_view(TicketSystemView())
+        self.add_view(CloseTicketView())
+        # Carrega todas as extensões (módulos / cogs) na pasta modules/
+        for filename in os.listdir('./modules'):
+            if filename.endswith('.py') and filename != '__init__.py':
+                try:
+                    await self.load_extension(f'modules.{filename[:-3]}')
+                    print(f'Módulo carregado: {filename}')
+                except Exception as e:
+                    print(f'Erro ao carregar o módulo {filename}: {e}')
 
-@bot.event
-async def on_member_remove(member: discord.Member):
-    guild = member.guild
+    async def on_ready(self):
+        print(f'Bot conectado com sucesso como {self.user} (ID: {self.user.id})')
+        print('Pronto para gerenciar a Gato Comics!')
+        await self.change_presence(activity=discord.Game(name="Lendo Webtoons na Gato Comics"))
 
-    # Atualizar estatísticas
-    for vc in guild.voice_channels:
-        if vc.name.startswith("👥 Membros:"):
-            try: await vc.edit(name=f"👥 Membros: {guild.member_count}")
-            except: pass
+bot = GatoComicsBot()
 
-    ch = discord.utils.get(guild.channels, name=WELCOME_CHANNEL)
-    if ch:
-        embed = discord.Embed(
-            description=f"👋 **{member.display_name}** saiu do servidor. Até mais!",
-            color=discord.Color.light_grey()
-        )
-        await ch.send(embed=embed)
-
-
-@bot.event
-async def on_message(message):
-    if message.author.bot or not message.guild:
-        return
-
-    # XP, anti-spam, streak e missões
-    await xp_process_message(message, bot)
-
-    # Moderação IA
-    await on_message_ai(message)
-
-    await bot.process_commands(message)
-
-
-@bot.event
-async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
-    if isinstance(error, app_commands.CommandOnCooldown):
-        await interaction.response.send_message(
-            f"⏳ Aguarde **{error.retry_after:.0f}s** para usar este comando novamente!",
-            ephemeral=True
-        )
-    elif isinstance(error, app_commands.MissingPermissions):
-        await interaction.response.send_message("❌ Você não tem permissão para isso!", ephemeral=True)
-    elif isinstance(error, app_commands.CheckFailure):
-        pass  # Já tratado nos checks individuais
+if __name__ == '__main__':
+    # Obtém o token do .env
+    token = os.getenv('DISCORD_TOKEN')
+    
+    if token is None or token == 'seu_token_aqui':
+        print("AVISO: Token do Discord não configurado. Por favor, adicione seu token no arquivo .env")
     else:
-        await interaction.response.send_message(f"❌ Erro: {str(error)[:100]}", ephemeral=True)
-        print(f"[ERRO] {error}")
-
-
-# ─────────────────────────────────────────
-#  Iniciar bot
-# ─────────────────────────────────────────
-if __name__ == "__main__":
-    if not TOKEN:
-        print("❌ TOKEN não encontrado no .env!")
-        exit(1)
-    bot.run(TOKEN)
+        bot.run(token)
