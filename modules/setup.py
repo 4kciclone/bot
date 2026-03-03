@@ -22,7 +22,7 @@ class Setup(commands.Cog):
             {"name": "🎨 Artista Parceiro", "color": discord.Color.brand_green(), "hoist": True, "permissions": discord.Permissions(send_messages=True, read_messages=True)},
             {"name": "🖌️ Autor", "color": discord.Color.blue(), "hoist": True, "permissions": discord.Permissions(send_messages=True, read_messages=True)},
             {"name": "🌟 Super Fã (VIP)", "color": discord.Color.purple(), "hoist": True, "permissions": discord.Permissions(send_messages=True, read_messages=True)},
-            {"name": "🚀 Server Booster", "color": discord.Color.nitro_pink(), "hoist": True, "permissions": discord.Permissions(send_messages=True, read_messages=True)},
+            {"name": "🚀 Server Booster", "color": discord.Color.magenta(), "hoist": True, "permissions": discord.Permissions(send_messages=True, read_messages=True)},
             {"name": "📖 Leitor (Membro)", "color": discord.Color.lighter_grey(), "hoist": True, "permissions": discord.Permissions(send_messages=True, read_messages=True)},
             {"name": "🔔 Ping de Anúncios", "color": discord.Color.light_grey(), "hoist": False, "permissions": discord.Permissions(send_messages=True, read_messages=True)},
             {"name": "🤖 Bots Parceiros", "color": discord.Color.dark_grey(), "hoist": False, "permissions": discord.Permissions.none()},
@@ -139,11 +139,15 @@ class Setup(commands.Cog):
 
         for cat_data in categories_data:
             category = discord.utils.get(guild.categories, name=cat_data["name"])
+            
+            # Limpar chaves None (caso um cargo tenha falhado em ser criado antes)
+            clean_overwrites = {k: v for k, v in cat_data["overwrites"].items() if k is not None}
+            
             if not category:
                 try:
                     category = await guild.create_category(
                         name=cat_data["name"],
-                        overwrites=cat_data["overwrites"]
+                        overwrites=clean_overwrites
                     )
                 except Exception as e:
                     await ctx.send(f"⚠️ Erro ao criar categoria {cat_data['name']}: {e}")
