@@ -53,6 +53,7 @@ class Setup(commands.Cog):
         role_suporte = created_roles.get("🎧 Equipe de Suporte")
         role_autor = created_roles.get("🖌️ Autor")
         role_vip = created_roles.get("🌟 Super Fã (VIP)")
+        role_bots = created_roles.get("🤖 Bots Parceiros")
 
         # Everyone role para esconder canais por padrão
         role_everyone = guild.default_role
@@ -63,6 +64,7 @@ class Setup(commands.Cog):
                 "name": "📌 RECEPÇÃO",
                 "overwrites": {
                     role_everyone: discord.PermissionOverwrite(read_messages=True, send_messages=False),
+                    role_bots: discord.PermissionOverwrite(read_messages=True, send_messages=False),
                 },
                 "channels": [
                     {"name": "bem-vindo", "type": "text"},
@@ -105,7 +107,8 @@ class Setup(commands.Cog):
             {
                 "name": "📚 COMUNIDADE",
                 "overwrites": {
-                    role_everyone: discord.PermissionOverwrite(read_messages=True, send_messages=True)
+                    role_everyone: discord.PermissionOverwrite(read_messages=True, send_messages=True),
+                    role_bots: discord.PermissionOverwrite(read_messages=True, send_messages=False)
                 },
                 "channels": [
                     {"name": "chat-geral", "type": "text"},
@@ -117,7 +120,8 @@ class Setup(commands.Cog):
             {
                 "name": "🎭 ENTRETENIMENTO",
                 "overwrites": {
-                    role_everyone: discord.PermissionOverwrite(read_messages=True, send_messages=True)
+                    role_everyone: discord.PermissionOverwrite(read_messages=True, send_messages=True),
+                    role_bots: discord.PermissionOverwrite(read_messages=True, send_messages=True)
                 },
                 "channels": [
                     {"name": "comandos-bots", "type": "text"},
@@ -169,6 +173,61 @@ class Setup(commands.Cog):
 
     @setup_server.error
     async def setup_server_error(self, ctx, error):
+        if isinstance(error, commands.MissingPermissions):
+            await ctx.send("❌ Você precisa ser um Administrador para rodar este comando.")
+
+    @commands.command(name='setup_regras', help='[Admin] Envia o Embed de regras para o canal #guia-da-comunidade.')
+    @commands.has_permissions(administrator=True)
+    async def setup_regras(self, ctx):
+        channel = discord.utils.get(ctx.guild.channels, name="guia-da-comunidade")
+        if not channel:
+            await ctx.send("❌ Canal #guia-da-comunidade não encontrado. Rode o `!setup_server` primeiro.")
+            return
+
+        embed = discord.Embed(
+            title="📜 Guia Oficial da Gato Comics",
+            description="Bem-vindo(a) à central de Webtoons e Mangás BR! Siga as nossas diretrizes para mantermos nossa comunidade incrível e saudável.",
+            color=discord.Color.brand_green()
+        )
+        embed.add_field(
+            name="1️⃣ Respeito em Primeiro Lugar",
+            value="Trate os membros, artistas e staff com respeito. Não toleramos discurso de ódio, assédio ou preconceito.",
+            inline=False
+        )
+        embed.add_field(
+            name="2️⃣ Evite Spoilers",
+            value="Ninguém gosta de surpresas estragadas! Use as barras de `||spoiler||` no chat se for falar de lançamentos recentes.",
+            inline=False
+        )
+        embed.add_field(
+            name="3️⃣ Propriedade Intelectual",
+            value="Respeite os direitos dos criadores. Não poste links de pirataria de nosso conteúdo ou outras obras externas.",
+            inline=False
+        )
+        embed.add_field(
+            name="4️⃣ Cada Bot no seu Quadrado",
+            value="Use bots de música, jogos e imagens **apenas** na categoria **🎭 ENTRETENIMENTO** e em seus devidos canais.",
+            inline=False
+        )
+        embed.add_field(
+            name="5️⃣ Suporte e Bugs",
+            value="Problemas de leitura ou pagamento? Abra um ticket em **#suporte** na aba **🎟️ TICKETS** para falar diretamente com a Equipe.",
+            inline=False
+        )
+        embed.set_footer(text="Gato Comics - Conectando Criadores e Fãs!")
+        
+        if ctx.guild.icon:
+            embed.set_thumbnail(url=ctx.guild.icon.url)
+
+        try:
+            await channel.purge(limit=5)
+            await channel.send(embed=embed)
+            await ctx.send(f"✅ Regras enviadas com sucesso para o canal <#{channel.id}>!")
+        except Exception as e:
+            await ctx.send(f"⚠️ Erro ao postar regras: {e}")
+
+    @setup_regras.error
+    async def setup_regras_error(self, ctx, error):
         if isinstance(error, commands.MissingPermissions):
             await ctx.send("❌ Você precisa ser um Administrador para rodar este comando.")
 
