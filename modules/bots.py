@@ -23,11 +23,11 @@ class BotPanel(discord.ui.View):
             emoji="🎮"
         ))
 
-        # 🎨 Artes (Midjourney/Niji)
+        # 🎨 Artes (imgnAI - Gratuito)
         self.add_item(discord.ui.Button(
-            label="Artes IA (Niji Journey)", 
+            label="Artes IA (imgnAI)", 
             style=discord.ButtonStyle.link, 
-            url="https://nijijourney.com/pt-BR/",
+            url="https://top.gg/bot/imgnai",
             emoji="🎨"
         ))
 
